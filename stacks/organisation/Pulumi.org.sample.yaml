@@ -1,0 +1,2 @@
+config:
+  gcp:region: australia-southeast1

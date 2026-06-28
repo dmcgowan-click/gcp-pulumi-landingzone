@@ -36,4 +36,23 @@ Compatible with Windows where WSL is installed!
 
 [Dev Container](.devcontainer)
 
-TO BE UPDATED
+### Organisation Stack
+
+The foundational Pulumi stack for GCP organisation-level resources. Located in `stacks/organisation/`, it uses TypeScript with `@pulumi/gcp` and targets `australia-southeast1` by default.
+
+### Makefile
+
+A Makefile provides the primary interface for infrastructure operations:
+
+| Target | Description |
+|--------|-------------|
+| `make preview-infra` | Preview infrastructure changes |
+| `make up-infra` | Deploy infrastructure with Pulumi |
+
+Set `PULUMI_STATE_BUCKET` to use a GCS backend for state; otherwise Pulumi defaults to local or Pulumi Cloud.
+
+## Getting Started
+
+1. Open the repo in VS Code and accept the dev container prompt (or use `Dev Containers: Reopen in Container`)
+2. Run `make preview-infra` to see planned changes
+3. Run `make up-infra` to deploy
