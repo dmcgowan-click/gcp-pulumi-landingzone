@@ -1,0 +1,6 @@
+name: organisation
+runtime:
+  name: nodejs
+  options:
+    typescript: true
+description: GCP Pulumi LandingZone - Organisation
