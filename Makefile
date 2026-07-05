@@ -1,4 +1,4 @@
-.PHONY: help prepare-infra preview-infra up-infra migrate-state
+.PHONY: help prepare-infra preview-infra up-infra migrate-state dev-setup
 
 .DEFAULT_GOAL := help
 help: ## Show this help message
@@ -6,28 +6,43 @@ help: ## Show this help message
 
 WORK_DIR := /home/ubuntu/workspace
 PULUMI_DIR := $(WORK_DIR)/pulumi
-STACK_DIR := stacks/organisation
-PULUMI_STACK ?= org
+STACK_ENV ?= org
 GCP_REGION ?= australia-southeast1
+PULUMI_STACK ?= $(STACK_ENV)
 
-# Login to GCS backend if PULUMI_STATE_BUCKET is set, otherwise use default (local/Pulumi Cloud)
+# Login to GCS backend if PULUMI_STATE_BUCKET is set, otherwise use local state
 define pulumi_login
-$(if $(PULUMI_STATE_BUCKET),cd $(PULUMI_DIR) && pulumi login gs://$(PULUMI_STATE_BUCKET),)
+$(if $(PULUMI_STATE_BUCKET),cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi login gs://$(PULUMI_STATE_BUCKET),cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi login --local)
 endef
 
-prepare-infra: ## [auto] Sync Pulumi code and install deps (called by up-infra, preview-infra)
-	mkdir -p $(PULUMI_DIR)
-	rsync -a --delete --exclude=node_modules $(STACK_DIR)/ $(PULUMI_DIR)/
-	cd $(PULUMI_DIR) && npm install
+_check-vars:
+	@test -n "$(STACK_DIR)" || (echo "ERROR: STACK_DIR is required. Set to the stack directory under stacks/, e.g. STACK_DIR=stacks/identity" && exit 1)
+	@test -n "$(STACK_ENV)" || (echo "ERROR: STACK_ENV is required. Set to the environment to deploy, e.g. STACK_ENV=org" && exit 1)
+	@test -d "$(STACK_DIR)" || (echo "ERROR: STACK_DIR '$(STACK_DIR)' does not exist" && exit 1)
+
+dev-setup: ## Install root node_modules for editor type resolution
+	npm install
+
+prepare-infra: _check-vars ## [auto] Sync Pulumi code and install deps (called by up-infra, preview-infra)
+	mkdir -p $(PULUMI_DIR)/$(STACK_DIR)
+	rsync -a --delete --exclude=node_modules $(STACK_DIR)/ $(PULUMI_DIR)/$(STACK_DIR)/
+	@if [ -d modules ]; then \
+		mkdir -p $(PULUMI_DIR)/modules && \
+		rsync -a --delete --exclude=node_modules modules/ $(PULUMI_DIR)/modules/; \
+	fi
+	cd $(PULUMI_DIR)/$(STACK_DIR) && npm install
+	@if [ -d modules ]; then \
+		ln -sfn $(PULUMI_DIR)/$(STACK_DIR)/node_modules $(PULUMI_DIR)/modules/node_modules; \
+	fi
 
 preview-infra: prepare-infra ## Preview infrastructure changes
 	$(call pulumi_login)
-	cd $(PULUMI_DIR) && pulumi stack select $(PULUMI_STACK) --create 2>/dev/null; \
+	cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi stack select $(PULUMI_STACK) --create 2>/dev/null; \
 	pulumi preview --refresh
 
 up-infra: prepare-infra ## Deploy infrastructure with Pulumi
 	$(call pulumi_login)
-	cd $(PULUMI_DIR) && pulumi stack select $(PULUMI_STACK) --create 2>/dev/null; \
+	cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi stack select $(PULUMI_STACK) --create 2>/dev/null; \
 	pulumi up --yes --refresh
 
 #COMMENTED OUT: Will re-enable once the bootstrap infra is in place

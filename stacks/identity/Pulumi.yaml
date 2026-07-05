@@ -1,0 +1,6 @@
+name: identity
+runtime:
+  name: nodejs
+  options:
+    typescript: true
+description: GCP Pulumi LandingZone - Google Identity

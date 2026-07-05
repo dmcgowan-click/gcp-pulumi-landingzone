@@ -1,0 +1,12 @@
+{
+  "name": "gcp-pulumi-landingzone",
+  "private": true,
+  "description": "Root package for editor type resolution only — not used at deploy time",
+  "dependencies": {
+    "@pulumi/pulumi": "^3",
+    "@pulumi/gcp": "^8"
+  },
+  "devDependencies": {
+    "@types/node": "^20"
+  }
+}

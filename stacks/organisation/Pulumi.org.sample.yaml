@@ -1,2 +1,11 @@
 config:
   gcp:region: australia-southeast1
+  organisation:organisation: "<organisation numeric ID>"
+  organisation:environments:
+    - <environment name a>
+    - <environment name b>
+  organisation:bindingsSuperAdmin:
+    group: "<group:email@domain>"
+    bindings:
+      - <role_id_a>
+      - <role_id_b>

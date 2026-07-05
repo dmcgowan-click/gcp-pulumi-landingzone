@@ -36,23 +36,53 @@ Compatible with Windows where WSL is installed!
 
 [Dev Container](.devcontainer)
 
-### Organisation Stack
-
-The foundational Pulumi stack for GCP organisation-level resources. Located in `stacks/organisation/`, it uses TypeScript with `@pulumi/gcp` and targets `australia-southeast1` by default.
-
 ### Makefile
 
-A Makefile provides the primary interface for infrastructure operations:
+The Makefile provides the primary interface for infrastructure operations and supports multiple stacks:
 
 | Target | Description |
 |--------|-------------|
 | `make preview-infra` | Preview infrastructure changes |
 | `make up-infra` | Deploy infrastructure with Pulumi |
+| `make dev-setup` | Set up local development environment |
 
-Set `PULUMI_STATE_BUCKET` to use a GCS backend for state; otherwise Pulumi defaults to local or Pulumi Cloud.
+**Variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `STACK_NAME` | `organisation` | Stack to operate on (e.g. `organisation`, `identity`) |
+| `STACK_ENV` | `org` | Environment/stack selector for Pulumi |
+
+Set `PULUMI_STATE_BUCKET` to use a GCS backend for state; otherwise Pulumi defaults to local state.
+
+### Organisation Stack
+
+The foundational Pulumi stack for GCP organisation-level resources. Located in `stacks/organisation/`, it provisions:
+
+- **Folders** — a `common` folder and one folder per environment (e.g. `dev`, `prod`)
+- **Super Admin IAM bindings** — assigns organisation-level roles to a Google Identity group
+
+Uses the shared `folder` and `iam` modules.
+
+### Identity Stack
+
+Located in `stacks/identity/`, this stack manages Google Workspace users and groups via `@pulumi/google-workspace`. Currently scaffolded with a sample config template.
+
+### Modules
+
+Reusable Pulumi `ComponentResource` modules consumed by stacks via relative import:
+
+| Module | Path | Purpose |
+|--------|------|---------|
+| Folder | `modules/folder/` | Creates GCP resource folders under an organisation or parent folder, with optional IAM bindings |
+| IAM | `modules/iam/` | Non-authoritative IAM member bindings for organisation, folder, project, or resource targets |
+
+### Standard Template Constructs (STC)
+
+The `stc/` directory contains specification documents that define how stacks and modules should be generated. These serve as blueprints for AI-assisted code generation and ensure consistency across the codebase.
 
 ## Getting Started
 
 1. Open the repo in VS Code and accept the dev container prompt (or use `Dev Containers: Reopen in Container`)
-2. Run `make preview-infra` to see planned changes
-3. Run `make up-infra` to deploy
+2. Select your stack: `make preview-infra STACK_NAME=organisation`
+3. Run `make up-infra STACK_NAME=organisation` to deploy

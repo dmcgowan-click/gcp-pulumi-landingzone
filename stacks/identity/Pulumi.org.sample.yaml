@@ -1,0 +1,17 @@
+config:
+  gcp:region: australia-southeast1
+  identity:domain: <domain name for google identity>
+  identity:principalOwnerName: <email of principal owner>
+  identity:principals:
+    groups:
+      - name: <name>
+        description: <description of group>
+        users:
+          - emailPrimaryId: <user primary email, ID only, part of Google Identity>
+    users:
+      - firstName: <first name>
+        lastName: <last name>
+        emailPrimaryId: <user primary email, ID only, part of Google Identity>
+        emailSecondary: <user secondary email, full email address (optional)>
+        phoneNumber: <phone number (optional)>
+        organisationalUnit: <organisational unit (optional)>
