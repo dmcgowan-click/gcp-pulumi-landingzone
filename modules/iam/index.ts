@@ -8,7 +8,7 @@ import * as gcp from "@pulumi/gcp";
  * @param organisation The organisation ID to bind IAM roles to
  * @param folder The folder ID to bind IAM roles to
  * @param project The project ID to bind IAM roles to
- * @param resource The resource to bind IAM roles to (storage bucket name or service account email)
+ * @param resource The resource to bind IAM roles to (type + identifier)
  * @param bindings A map of role IDs to lists of principals
  */
 export interface IamArgs {
@@ -16,8 +16,8 @@ export interface IamArgs {
     folder?: pulumi.Input<string>;
     project?: pulumi.Input<string>;
     resource?: {
-        type: pulumi.Input<string>;
-        name: pulumi.Input<string>;
+        type: string;
+        identifier: pulumi.Input<string>;
     };
     bindings: {
         [roleId: string]: pulumi.Input<string>[];
@@ -36,7 +36,7 @@ export class Iam extends pulumi.ComponentResource {
     public readonly organisation: pulumi.Output<string | null>;
     public readonly folder: pulumi.Output<string | null>;
     public readonly project: pulumi.Output<string | null>;
-    public readonly resource: pulumi.Output<{ type: string; name: string } | null>;
+    public readonly resource: pulumi.Output<{ type: string; identifier: string } | null>;
     public readonly bindings: pulumi.Output<{ [roleId: string]: string[] }>;
 
     constructor(name: string, args: IamArgs, opts?: pulumi.ComponentResourceOptions) {
@@ -69,13 +69,13 @@ export class Iam extends pulumi.ComponentResource {
                 } else if (args.resource) {
                     if (args.resource.type === "storage") {
                         new gcp.storage.BucketIAMMember(resourceName, {
-                            bucket: args.resource.name,
+                            bucket: args.resource.identifier,
                             role: roleId,
                             member: principal,
                         }, { parent: this });
                     } else if (args.resource.type === "service_account") {
                         new gcp.serviceaccount.IAMMember(resourceName, {
-                            serviceAccountId: args.resource.name,
+                            serviceAccountId: args.resource.identifier,
                             role: roleId,
                             member: principal,
                         }, { parent: this });
@@ -87,7 +87,11 @@ export class Iam extends pulumi.ComponentResource {
         this.organisation = pulumi.output(args.organisation ?? null);
         this.folder = pulumi.output(args.folder ?? null);
         this.project = pulumi.output(args.project ?? null);
-        this.resource = pulumi.output(args.resource ? { type: args.resource.type as string, name: args.resource.name as string } : null);
+        this.resource = pulumi.output(
+            args.resource
+                ? { type: args.resource.type, identifier: args.resource.identifier }
+                : null
+        );
         this.bindings = pulumi.output(
             Object.fromEntries(
                 Object.entries(args.bindings).map(([role, principals]) => [role, principals as string[]])
@@ -105,6 +109,8 @@ export class Iam extends pulumi.ComponentResource {
 
     /**
      * Validates the input arguments for the IAM module.
+     * Syntax-level validation only — verifies format and required fields.
+     * Resource existence is deferred to GCP APIs at apply time.
      *
      * @param args The IAM binding arguments to validate
      */
@@ -122,12 +128,11 @@ export class Iam extends pulumi.ComponentResource {
         }
 
         if (args.resource) {
-            const resourceType = args.resource.type as string;
-            if (resourceType !== "storage" && resourceType !== "service_account") {
-                throw new Error(`Unsupported resource type '${resourceType}'. Must be one of: storage, service_account`);
+            if (args.resource.type !== "storage" && args.resource.type !== "service_account") {
+                throw new Error(`Unsupported resource type '${args.resource.type}'. Must be one of: storage, service_account`);
             }
-            if (!args.resource.name) {
-                throw new Error("'resource.name' must be provided when 'resource' is specified.");
+            if (!args.resource.identifier) {
+                throw new Error("'resource.identifier' must be provided when 'resource' is specified.");
             }
         }
 

@@ -5,7 +5,8 @@
     "@types/node": "^20"
   },
   "dependencies": {
+    "@pulumi/gcp": "^8",
     "@pulumi/pulumi": "^3",
-    "@pulumi/gcp": "^8"
+    "@pulumi/random": "^4.21.0"
   }
 }

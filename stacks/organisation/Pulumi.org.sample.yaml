@@ -1,6 +1,7 @@
 config:
   gcp:region: australia-southeast1
   organisation:organisation: "<organisation numeric ID>"
+  organisation:billing: "<billing account id (format: XXXXXX-XXXXXX-XXXXXX)>"
   organisation:environments:
     - <environment name a>
     - <environment name b>
@@ -9,3 +10,5 @@ config:
     bindings:
       - <role_id_a>
       - <role_id_b>
+  organisation:labels: # (optional) - GCP project labels (keys/values: lowercase, digits, underscores, hyphens only; max 63 chars)
+    <key>: <value>

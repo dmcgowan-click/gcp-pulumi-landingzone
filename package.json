@@ -3,10 +3,12 @@
   "private": true,
   "description": "Root package for editor type resolution only — not used at deploy time",
   "dependencies": {
+    "@pulumi/gcp": "^8",
     "@pulumi/pulumi": "^3",
-    "@pulumi/gcp": "^8"
+    "@pulumi/random": "^4"
   },
   "devDependencies": {
-    "@types/node": "^20"
+    "@types/node": "^20",
+    "typescript": "^5.9.3"
   }
 }

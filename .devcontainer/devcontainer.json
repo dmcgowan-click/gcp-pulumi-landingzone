@@ -7,7 +7,7 @@
 	"context": "..",
 
 	// Image location
-    "image": "dmcgowan3e7a/vscode-dev-container-llm:latest",
+    "image": "dmcgowan3e7a/vscode-dev-container-llm:feature-test-multiarch-support",
 
 	// Specify user
 	"containerUser": "ubuntu",
