@@ -10,9 +10,9 @@ STACK_ENV ?= org
 GCP_REGION ?= australia-southeast1
 PULUMI_STACK ?= $(STACK_ENV)
 
-# Login to GCS backend if PULUMI_STATE_BUCKET is set, otherwise use local state
+# Login to GCS backend. Priority: state.yaml in stack dir > PULUMI_STATE_BUCKET env var > local state
 define pulumi_login
-$(if $(PULUMI_STATE_BUCKET),cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi login gs://$(PULUMI_STATE_BUCKET),cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi login --local)
+$(if $(shell test -f $(STACK_DIR)/state.yaml && echo yes),cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi login gs://$$(yq -r '.[]' state.yaml),$(if $(PULUMI_STATE_BUCKET),cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi login gs://$(PULUMI_STATE_BUCKET),cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi login --local))
 endef
 
 _check-vars:
@@ -45,17 +45,13 @@ up-infra: prepare-infra ## Deploy infrastructure with Pulumi
 	cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi stack select $(PULUMI_STACK) --create 2>/dev/null; \
 	pulumi up --yes --refresh
 
-#COMMENTED OUT: Will re-enable once the bootstrap infra is in place
-# migrate-state: prepare-infra ## Migrate local Pulumi state to GCS backend (requires PULUMI_STATE_BUCKET)
-# ifndef PULUMI_STATE_BUCKET
-# 	$(error PULUMI_STATE_BUCKET is required. Usage: make migrate-state PULUMI_STATE_BUCKET=my-bucket)
-# endif
-# 	cd $(PULUMI_DIR) && pulumi login --local
-# 	cd $(PULUMI_DIR) && pulumi stack select $(PULUMI_STACK) 2>/dev/null || \
-# 		(echo "ERROR: Stack $(PULUMI_STACK) not found in local state"; exit 1)
-# 	cd $(PULUMI_DIR) && pulumi stack export --file /tmp/pulumi-state-export.json
-# 	cd $(PULUMI_DIR) && pulumi login gs://$(PULUMI_STATE_BUCKET)
-# 	cd $(PULUMI_DIR) && pulumi stack select $(PULUMI_STACK) --create 2>/dev/null
-# 	cd $(PULUMI_DIR) && pulumi stack import --file /tmp/pulumi-state-export.json
-# 	@rm -f /tmp/pulumi-state-export.json
-# 	@echo "State migrated successfully to gs://$(PULUMI_STATE_BUCKET)"
+migrate-state: _check-vars ## Migrate local Pulumi state to GCS backend (reads bucket from state.yaml)
+	@test -f "$(STACK_DIR)/state.yaml" || (echo "ERROR: $(STACK_DIR)/state.yaml not found. Create it with the GCS bucket name from stack outputs." && exit 1)
+	@BUCKET=$$(yq -r '.[]' $(STACK_DIR)/state.yaml); \
+	PROJECT=$$(yq -r '.name' $(STACK_DIR)/Pulumi.yaml); \
+	LOCAL_STATE=$$HOME/.pulumi/stacks/$$PROJECT/$(PULUMI_STACK).json; \
+	test -f "$$LOCAL_STATE" || (echo "ERROR: Local state file not found at $$LOCAL_STATE" && exit 1); \
+	GCS_PATH=".pulumi/stacks/$$PROJECT/$(PULUMI_STACK).json"; \
+	echo "Migrating local state to gs://$$BUCKET/$$GCS_PATH"; \
+	gsutil cp "$$LOCAL_STATE" "gs://$$BUCKET/$$GCS_PATH" && \
+	echo "State migrated successfully to gs://$$BUCKET/$$GCS_PATH"

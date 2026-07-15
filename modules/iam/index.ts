@@ -45,8 +45,10 @@ export class Iam extends pulumi.ComponentResource {
         this.validateArgs(args);
 
         for (const [roleId, principals] of Object.entries(args.bindings)) {
-            for (const principal of principals) {
-                const resourceName = `${name}-${roleId}-${principal}`.replace(/[/:]/g, "-");
+            for (let i = 0; i < principals.length; i++) {
+                const principal = principals[i];
+                const nameKey = typeof principal === "string" ? principal : `member-${i}`;
+                const resourceName = `${name}-${roleId}-${nameKey}`.replace(/[/:]/g, "-");
 
                 if (args.organisation) {
                     new gcp.organizations.IAMMember(resourceName, {
@@ -148,10 +150,12 @@ export class Iam extends pulumi.ComponentResource {
             }
 
             for (const principal of principals) {
-                const principalStr = principal as string;
-                if (!validPrefixes.some((prefix) => principalStr.startsWith(prefix))) {
+                if (typeof principal !== "string") {
+                    continue;
+                }
+                if (!validPrefixes.some((prefix) => principal.startsWith(prefix))) {
                     throw new Error(
-                        `Invalid principal '${principalStr}' for role '${roleId}'. Must start with one of: ${validPrefixes.join(", ")}`
+                        `Invalid principal '${principal}' for role '${roleId}'. Must start with one of: ${validPrefixes.join(", ")}`
                     );
                 }
             }
