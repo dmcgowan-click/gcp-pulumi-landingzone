@@ -5,7 +5,8 @@
   "dependencies": {
     "@pulumi/gcp": "^8",
     "@pulumi/pulumi": "^3",
-    "@pulumi/random": "^4"
+    "@pulumi/random": "^4",
+    "@pulumi/googleworkspace": "file:stacks/identity/sdks/googleworkspace"
   },
   "devDependencies": {
     "@types/node": "^20",

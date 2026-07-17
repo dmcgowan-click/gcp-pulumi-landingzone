@@ -1,7 +1,8 @@
 config:
-  gcp:region: australia-southeast1
   identity:domain: <domain name for google identity>
-  identity:principalOwnerName: <email of principal owner>
+  identity:customerId: <Google Workspace customer ID (starts with C)>
+  identity:impersonateAdmin: <admin email for domain-wide delegation (a user within Google Identity which sufficient admin access)>
+  identity:serviceAccountEmail: <service account email from organisation stack>
   identity:principals:
     groups:
       - name: <name>

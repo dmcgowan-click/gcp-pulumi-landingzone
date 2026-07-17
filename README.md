@@ -8,7 +8,7 @@ If you're a small to medium business that needs a presence in GCP, this might be
 
 Inspired by the [Google Cloud Security Foundations Guide](https://services.google.com/fh/files/misc/google-cloud-security-foundations-guide.pdf), but without the bloat, and designed to be modular so you enable the components you need. Keep It Simple Stupid (KISS) is the aim here. And of course, Pulumi, not Terraform
 
-To get started, click here! To find out more, read on
+To get started, [click here!](#getting-started) To find out more, read on
 
 **Why a landing zone?**
 
@@ -86,7 +86,12 @@ Uses the shared `folder`, `iam`, `project`, `storage`, and `labels` modules.
 
 ### Identity Stack
 
-Located in `stacks/identity/`, this stack manages Google Workspace users and groups via `@pulumi/google-workspace`. Currently scaffolded with a sample config template.
+Located in `stacks/identity/`, this stack manages Google Workspace users and groups via `@pulumi/googleworkspace` using domain-wide delegation. It provisions:
+
+- **Users** — creates Google Workspace users with auto-generated passwords (secrets), recovery contacts, and forced password change on first login
+- **Groups** — creates groups and assigns memberships with proper dependency ordering
+
+Requires a service account with domain-wide delegation (created by the Organisation stack) and the Admin SDK API enabled on the seed project. See `stacks/identity/Pulumi.org.sample.yaml` for config template.
 
 ### Modules
 
@@ -104,17 +109,57 @@ Reusable Pulumi `ComponentResource` modules consumed by stacks via relative impo
 
 **hint** get your favourite agent to read this section of README, it will get you setup in minutes!
 
+### Bootstrap
+
 1. Open the repo in VS Code 
    * Optionally accept the dev container prompt (or use `Dev Containers: Reopen in Container`) to open in a dev container
 2. Run `make dev-setup` to install root dependencies for editor type resolution
 3. Copy the sample config for your stack and fill in your values:
-   ```bash
+```bash
    cp stacks/organisation/Pulumi.org.sample.yaml stacks/organisation/Pulumi.org.yaml
-   ```
+```
 4. Authenticate with GCP: `gcloud auth login && gcloud auth application-default login`
 5. Preview your changes: `make preview-infra STACK_DIR=stacks/organisation`
 6. Deploy: `make up-infra STACK_DIR=stacks/organisation`
 
-> Set `PULUMI_STATE_BUCKET` to persist state in GCS, e.g. `make up-infra STACK_DIR=stacks/organisation PULUMI_STATE_BUCKET=my-bucket`
+### Configure State
 
-> Set `PULUMI_STATE_BUCKET` to persist state in GCS, e.g. `make up-infra STACK_DIR=stacks/organisation PULUMI_STATE_BUCKET=my-bucket`
+Previous steps will have created a GCP Storage Bucket for storage of the Pulumi state file. This bucket should be used for maintaining Pulumi state going forward
+
+1. Copy the sample state file config and populate with the newly created storage bucket
+```bash
+   cp stacks/organisation/state.sample.yaml stacks/organisation/state.yaml
+```
+   * Bucket name can be retrieved from the Pulumi outputs after the bootstrapping. Look for `pulumi-state-organisation-<random hex>`
+2. Copy local Pulumi state to the storage bucket: `make migrate-state STACK_DIR=stacks/organisation`
+
+### Setting Up and Running GCP Stacks
+
+All stacks will have one of the following sample configuration files
+
+* `Pulumi.org.sample.yaml` for org wide deployments
+* `Pulumi.ENV.sample.yaml` for deployments that will span across multiple environments
+
+Rename the files to the following accordingly
+
+* `Pulumi.org.yaml`
+* `Pulumi.dev.yaml` #dev is an example
+* `Pulumi.dev.yaml` #prd is an example
+
+And populate the values accordingly. Overwhelmed?! Start small and expand as needed
+
+All stacks can be run as follows after the bootstrap step
+
+```bash
+make up-infra STACK_DIR=stacks/<stack folder name>
+```
+
+All stacks will also contain the following configuration file
+
+* `state.sample.yaml`
+
+While not required, it is highly recommended to set this up so your Pulumi state is managed in the cloud, and not a local system. This is not just for backup, but also so multiple engineers can manage the same stack
+
+Rename file to the following and populate with the stack bucket name (created after bootstrap)
+
+* `state.yaml`

@@ -4,3 +4,4 @@ node_modules/
 .Pulumi*
 pulumi/.pulumi/
 dist
+sdks/

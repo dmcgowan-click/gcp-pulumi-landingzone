@@ -25,10 +25,10 @@
 	//Prevent override of container specific commands
 	"overrideCommand": false,
 
-	// Uncomment when using a ptrace-based debugger like C++, Go, and Rust
+	// If you are running on a Windows host with WSL2 and an Nvidia GPU, uncomment the following lines to enable GPU support for local LLMs. See https://aka.ms/vscode-remote/containers/gpu for details.
 	"runArgs": [
-		"--gpus",
-		"all",
+		// "--gpus",
+		// "all",
 		"--init"
 	],
 

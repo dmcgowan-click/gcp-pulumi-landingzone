@@ -71,6 +71,8 @@ bindingsOrgAdmin:
   bindings:
     - <role_id_a>
     - <role_id_b>
+apisAdditional: # (optional)
+  - <additional apis>
 labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
   <key>: <value>
 ```
@@ -90,10 +92,12 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
     * Create under `common` folder
     * Assign to `billing` account
     * Name `seed`
-    * APIs
+    * APIs - Hardcoded
       * cloudresourcemanager.googleapis.com
       * cloudbilling.googleapis.com
       * iam.googleapis.com
+    * APIs - Additional
+      * APIs `apisAdditional`
     * No IAM Bindings
   * Create bindings for Org Admin Google Identity group
     * Validate that `bindingsOrgAdmin.group` starts with `group:` prefix at construction time. Error if not. Only `group:` principals are accepted for this input.
@@ -140,32 +144,124 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
 
 Create a Pulumi stack under `stacks/identity` to create users and groups
 
-* Use `@pulumi/google-workspace`
-* Based on the `stacks/identity/Pulumi.org.sample.yaml` template
+* Use `@pulumi/googleworkspace`, `@pulumi/random`, `@pulumi/pulumi`, `@pulumi/gcp`
+* Dependencies (`package.json`):
+  * `@pulumi/pulumi`: `^3`
+  * `@pulumi/gcp`: `^7`
+  * `@pulumi/random`: `^4`
+  * `@pulumi/googleworkspace`: `file:sdks/googleworkspace` (local SDK — generated via `pulumi package add terraform-provider hashicorp/googleworkspace`, run from the stack directory)
+* Structure
+  * `createUsers(config, provider)` — creates all Google Workspace users, returns map of created user resources
+  * `createGroups(config, provider, users)` — creates groups and assigns memberships (depends on users)
+* Accept an input based on the following YAML definition
+
+```yaml
+identity:domain: <domain name for google identity>
+identity:customerId: <Google Workspace customer ID (starts with C)>
+identity:impersonateAdmin: <admin email for domain-wide delegation>
+identity:serviceAccountEmail: <service account email from organisation stack>
+identity:principals:
+  groups:
+    - name: <name>
+      description: <description of group>
+      users:
+        - emailPrimaryId: <user primary email, ID only, part of Google Identity>
+  users:
+    - firstName: <first name>
+      lastName: <last name>
+      emailPrimaryId: <user primary email, ID only, part of Google Identity>
+      emailSecondary: <user secondary email, full email address (optional)>
+      phoneNumber: <phone number (optional)>
+      organisationalUnit: <organisational unit (optional)>
+```
+
 * Authentication
-  * TO BE UPDATED
+  * Uses a service account with domain-wide delegation (created by the Organisation stack)
+  * **Manual prerequisites** (performed once before this stack can run):
+    1. In **GCP Console** → IAM & Admin → Service Accounts → select the SA created by the Organisation stack
+       * Copy the **Unique ID** (numeric) — this is the OAuth Client ID
+    2. In **Google Admin Console** → Security → Access and data control → API Controls → Domain-wide Delegation
+       * Click "Add new" → paste the Client ID from step 1
+       * Add the following OAuth scopes:
+         * `https://www.googleapis.com/auth/cloud-platform` 
+         * `https://www.googleapis.com/auth/admin.directory.user`
+         * `https://www.googleapis.com/auth/admin.directory.group`
+         * `https://www.googleapis.com/auth/admin.directory.group.member`
+    3. Identify a **super admin user** in Google Workspace who has logged in at least once and accepted the Terms of Service — this is the `impersonateAdmin`
+    4. Obtain the **Customer ID** from Google Admin Console → Account → Account Settings
+    5. Grant the calling principal (whoever runs `pulumi up`) the `Service Account Token Creator` role on the domain-delegated SA
+  * **Credential flow** (within this stack, no separate stack required):
+    1. Define the Admin Directory OAuth scopes as a constant array:
+       * `https://www.googleapis.com/auth/admin.directory.user`
+       * `https://www.googleapis.com/auth/admin.directory.group`
+       * `https://www.googleapis.com/auth/admin.directory.group.member`
+    2. Use `gcp.serviceaccount.getAccountAccessToken` to mint a scoped access token for the domain-delegated SA
+       * `targetServiceAccount` = `serviceAccountEmail` from config
+       * `scopes` = `https://www.googleapis.com/auth/cloud-platform` + the Admin Directory scopes from step 1
+         * `cloud-platform` is required because the google-workspace provider internally calls `iamcredentials.googleapis.com/SignJwt` to perform domain-wide delegation
+       * This uses the calling principal's ADC to impersonate the SA — requires `Service Account Token Creator` role (configured in prerequisite step 5)
+    3. Pass the resulting token to the `google-workspace` provider's `accessToken` parameter
+    4. Set `serviceAccount` on the provider to the SA email (required for user impersonation via access token)
+  * **Provider configuration:**
+    * Instantiate a `google-workspace` provider with:
+      * `customerId` — from config
+      * `impersonatedUserEmail` — from config (`impersonateAdmin`)
+      * `accessToken` — the token minted in step 2 above
+      * `serviceAccount` — the SA email from config
+      * `oauthScopes` — the Admin Directory scopes from step 1 (not `cloud-platform` — that scope is only needed on the access token, not the provider)
+    * All Google Workspace resources must use this explicit provider instance
+  * **Config inputs for authentication:**
+    * `identity:customerId` — Google Workspace customer ID (starts with `C`)
+    * `identity:impersonateAdmin` — super admin email for user impersonation
+    * `identity:serviceAccountEmail` — SA email from Organisation stack
+* Validation
+  * `domain` must be provided and non-empty
+  * `customerId` must be provided and start with `C`
+  * `impersonateAdmin` must be provided and contain `@`
+  * `serviceAccountEmail` must be provided and contain `@`
+  * At least one of `principals.users` or `principals.groups` must be non-empty
+  * Each user entry must have `firstName`, `lastName`, and `emailPrimaryId` (all non-empty)
+  * Each group entry must have `name` and at least one user in `users`
+  * `emailPrimaryId` must not contain `@` (it is the ID-only portion, domain is appended automatically)
+* Resource Naming
+  * User resources: `user-<emailPrimaryId>` (e.g. `user-jdoe`)
+  * Group resources: `group-<name>` (e.g. `group-pulumi-admins`)
+  * Group member resources: `group-<name>-member-<emailPrimaryId>` (e.g. `group-pulumi-admins-member-jdoe`)
+  * Password resources: `password-<emailPrimaryId>` (e.g. `password-jdoe`)
 * Requirements
-  * Identity Groups
-    * Group email should always be `name`@`domain`
-    * Ensure users are provisioned first. The `users:` section within `groups:` has a dependency on users
-      * If a user does not exist, the stack should fail with a clear error identifying the invalid user and the group it was being added to
-        * A user may have been created outside of this stack, we still want to allow them to be added to a group managed under this repo. Use provided username email and rely on API error if username email is invalid
-    * Add `:principalOwnerName` as a single group owner
-  * Identity Users
-    * For `emailPrimaryId:` use `emailPrimaryId`@`domain`
-    * Where `(optional)`, do not enforce that these values be provided
-    * Randomly generate a password and force reset on initial login
+  * Create Identity Users
+    * `primaryEmail` = `<emailPrimaryId>@<domain>` (concatenate the ID-only value with the config domain)
+    * `name.givenName` = `firstName`
+    * `name.familyName` = `lastName`
+    * `recoveryEmail` = `emailSecondary` (if provided)
+    * `recoveryPhone` = `phoneNumber` (if provided)
+    * `orgUnitPath` = `organisationalUnit` (if provided, defaults to `/`)
+    * Password generation:
+      * Use `@pulumi/random` `RandomPassword` with `length: 16`, `special: true`
+      * Use `keepers` tied to `emailPrimaryId` to ensure the password is stable across re-runs (only regenerated if the user identity changes)
+      * Mark as `pulumi.secret()` — must not appear in plaintext in state or outputs
+      * Set `changePasswordAtNextLogin: true` on the user resource
+  * Create Identity Groups
+    * `email` = `<name>@<domain>` (concatenate group name with the config domain)
+    * `description` = `description`
+    * Assign each `emailPrimaryId` under `groups[].users` to the group:
+      * Construct member email as `<emailPrimaryId>@<domain>`
+      * Users may reference entries defined in `principals.users` (created in same run) or pre-existing Google Workspace users
+      * Add explicit `dependsOn` on the corresponding user resource (if created in this stack) to ensure ordering
+      * Rely on API error if the user does not exist
+* Return
+  * users — map of `<emailPrimaryId>: <full primary email>` for all created users
+  * groups — map of `<group name>: <group email>` for all created groups
 
 ## Modules
 
 * Use `@pulumi/gcp`, `@pulumi/pulumi` at minimum. Modules may require additional libraries (e.g. `@pulumi/random`) — these must be documented in the module STC and included in the calling stack's `package.json`.
-* Use TypeScript
 * Pulumi
   * `package.json` to be defined in calling stack. Implement code only
-* All modules are to be `pulumi.ComponentResource` modules, not native TypeScript modules
+* All modules are to be `pulumi.ComponentResource` modules, not native methods / functions
   * Structure should be `modules/<module name>/index.ts`
   * The ComponentResource input interface must be named `<ModuleName>Args` (e.g. `IamArgs`)
-* Where a YAML definition is provided use as a guide, but input should be a TypeScript object as it will be called by an underlying stack
+* Where a YAML definition is provided use as a guide, but input should be a method / function object as it will be called by an underlying stack
 * Modules are consumed by stacks via relative import and are not deployed independently. No Makefile target required.
 * Where module supports labels
   * Merge priority (later wins on key collision): user-provided labels (passed via `labels` arg) → module-level defaults (e.g. `module: "project"`, `deployed_by: "pulumi"`)

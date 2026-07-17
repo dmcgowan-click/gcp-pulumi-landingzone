@@ -20,8 +20,22 @@ _check-vars:
 	@test -n "$(STACK_ENV)" || (echo "ERROR: STACK_ENV is required. Set to the environment to deploy, e.g. STACK_ENV=org" && exit 1)
 	@test -d "$(STACK_DIR)" || (echo "ERROR: STACK_DIR '$(STACK_DIR)' does not exist" && exit 1)
 
+# Google Workspace provider version (bridged Terraform provider, not on npm)
+GWS_PROVIDER_VERSION ?= 0.7.0
+
 dev-setup: ## Install root node_modules for editor type resolution
 	npm install
+	@if grep -q '"@pulumi/googleworkspace"' package.json; then \
+		STACK_WITH_GWS=$$(grep -rl '"@pulumi/googleworkspace"' stacks/*/package.json 2>/dev/null | head -1 | xargs -r dirname); \
+		if [ -n "$$STACK_WITH_GWS" ]; then \
+			if [ ! -d "$$STACK_WITH_GWS/sdks/googleworkspace/bin" ]; then \
+				echo "Generating Google Workspace SDK in $$STACK_WITH_GWS/sdks..."; \
+				cd "$$STACK_WITH_GWS" && pulumi package add terraform-provider hashicorp/googleworkspace $(GWS_PROVIDER_VERSION); \
+			else \
+				echo "Google Workspace SDK already exists at $$STACK_WITH_GWS/sdks/googleworkspace"; \
+			fi; \
+		fi; \
+	fi
 
 prepare-infra: _check-vars ## [auto] Sync Pulumi code and install deps (called by up-infra, preview-infra)
 	mkdir -p $(PULUMI_DIR)/$(STACK_DIR)
@@ -29,6 +43,14 @@ prepare-infra: _check-vars ## [auto] Sync Pulumi code and install deps (called b
 	@if [ -d modules ]; then \
 		mkdir -p $(PULUMI_DIR)/modules && \
 		rsync -a --delete --exclude=node_modules modules/ $(PULUMI_DIR)/modules/; \
+	fi
+	@if grep -q '"@pulumi/googleworkspace"' $(PULUMI_DIR)/$(STACK_DIR)/package.json; then \
+		if [ ! -d $(PULUMI_DIR)/$(STACK_DIR)/sdks/googleworkspace/bin ]; then \
+			echo "Generating Google Workspace SDK for $(STACK_DIR)..."; \
+			cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi package add terraform-provider hashicorp/googleworkspace $(GWS_PROVIDER_VERSION); \
+		else \
+			echo "Google Workspace SDK already exists for $(STACK_DIR)"; \
+		fi; \
 	fi
 	cd $(PULUMI_DIR)/$(STACK_DIR) && npm install
 	@if [ -d modules ]; then \

@@ -13,5 +13,7 @@ config:
     bindings:
       - <role_id_a>
       - <role_id_b>
+  organisation:apisAdditional: # (optional)
+    - <additional api>
   organisation:labels: # (optional) - GCP project labels (keys/values: lowercase, digits, underscores, hyphens only; max 63 chars)
     <key>: <value>

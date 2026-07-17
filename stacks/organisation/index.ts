@@ -20,6 +20,7 @@ const bindingsOrgAdmin = config.requireObject<{
     };
     bindings: string[];
 }>("bindingsOrgAdmin");
+const apisAdditional = config.getObject<string[]>("apisAdditional") || [];
 const labels = config.getObject<{ [key: string]: string }>("labels") || {};
 const region = gcpConfig.require("region");
 
@@ -67,16 +68,20 @@ function createSeedProject(
     commonFolderId: pulumi.Output<string>,
     billingAccount: string,
     mergedLabels: pulumi.Output<{ [key: string]: string }>,
+    additionalApis: string[],
 ): Project {
+    const hardcodedApis = [
+        "cloudresourcemanager.googleapis.com",
+        "cloudbilling.googleapis.com",
+        "iam.googleapis.com",
+    ];
+    const apis = [...new Set([...hardcodedApis, ...additionalApis])];
+
     return new Project("seed", {
         folder: commonFolderId,
         billing: billingAccount,
         name: "seed",
-        apis: [
-            "cloudresourcemanager.googleapis.com",
-            "cloudbilling.googleapis.com",
-            "iam.googleapis.com",
-        ],
+        apis: apis,
         labels: mergedLabels,
     });
 }
@@ -164,7 +169,7 @@ const mergedLabels = labelsModule.labels.apply((sanitised): { [key: string]: str
     stack: "organisation",
 }));
 
-const seedProject = createSeedProject(folders["common"].folderId, billing, mergedLabels);
+const seedProject = createSeedProject(folders["common"].folderId, billing, mergedLabels, apisAdditional);
 
 const saEnabled = bindingsOrgAdmin.sa?.enabled === true;
 const saName = bindingsOrgAdmin.sa?.name || "cicd-org";
