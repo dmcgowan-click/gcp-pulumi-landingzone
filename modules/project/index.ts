@@ -62,10 +62,6 @@ export class Project extends pulumi.ComponentResource {
 
         const projectId = pulumi.interpolate`${args.name}-${postfix.hex}`;
 
-        const parent = args.organisation
-            ? pulumi.interpolate`organizations/${args.organisation}`
-            : pulumi.interpolate`folders/${args.folder}`;
-
         const mergedLabels = pulumi.output(args.labels || {}).apply(l => {
             const merged: { [key: string]: string } = {
                 ...l,

@@ -163,3 +163,14 @@ While not required, it is highly recommended to set this up so your Pulumi state
 Rename file to the following and populate with the stack bucket name (created after bootstrap)
 
 * `state.yaml`
+
+#### Extra Setup for the Identity Stack
+
+The Identity stack requires some additional configuration as it technically uses the Google Workspace provider. Perform these steps once you have completed above. This must be manually performed
+
+* In the GCP console, locate the service account created under the organisation stack (will be in the seed project) and copy the **Unique ID**
+* In the Google Admin console, go to Security > Access and data control > API Controls > MANAGE DOMAIN WIDE DELEGATION
+* Click Add new, enter the **Unique ID** from previously then add the following OAuth scopes
+   * `https://www.googleapis.com/auth/admin.directory.user`
+   * `https://www.googleapis.com/auth/admin.directory.group`
+   * `https://www.googleapis.com/auth/admin.directory.group.member`

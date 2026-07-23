@@ -61,8 +61,15 @@ Create a Pulumi stack under `stacks/organisation` to create org level components
 organisation: <organisation numeric ID>
 billing: <billing account id (format: XXXXXX-XXXXXX-XXXXXX)>
 environments:
-  - <environment name a>
-  - <environment name b>
+  - name: <environment name a>
+    bindings: # (optional) - IAM bindings applied to this environment's folder
+      <role_id_a>:
+        - <principal a>
+        - <principal b>
+      <role_id_b>:
+        - <principal a>
+        - <principal c>
+  - name: <environment name b>
 bindingsOrgAdmin:
   group: <email of an org wide admin group email in Google Identity>
   sa: # (optional)
@@ -73,6 +80,12 @@ bindingsOrgAdmin:
     - <role_id_b>
 apisAdditional: # (optional)
   - <additional apis>
+orgPolicyDisableIAMExternalOrg: <[true|false] defaults to true> # (optional)
+orgPolicyDisableServiceAccountKeyCreation: <[true|false] defaults to true> # (optional)
+orgPolicyAdditional: # (optional)
+  <policy constraint name>:
+    spec: <policy spec (optional, at least one of spec or dryRunSpec required)>
+    dryRunSpec: <dry run policy spec (optional, at least one of spec or dryRunSpec required)>
 labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
   <key>: <value>
 ```
@@ -83,10 +96,15 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
     * Create under organisation
       * common
         * Name hardcoded to `common`
-        * No IAM bindings applied
+        * No IAM bindings applied (asymmetric by design — `common` never accepts bindings)
       * environments
+        * Parsed type: `Array<{ name: string; bindings?: { [roleId: string]: string[] } }>`
         * One folder per entry under `environments`
         * At least one environment entry must be declared. Error if `environments` is empty or missing.
+        * Each entry `name` must be non-empty and unique across the list. Folder display-name length (3–30) deferred to the `folder` module.
+        * Folder display name = `name`; Pulumi resource name = `env-<name>`
+        * bindings (optional)
+          * If provided, pass the entry's `bindings` to the `folder` module for that environment's folder (target = created folder numeric ID)
   * Create seed project
     * Use `project` module
     * Create under `common` folder
@@ -96,9 +114,69 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
       * cloudresourcemanager.googleapis.com
       * cloudbilling.googleapis.com
       * iam.googleapis.com
+      * orgpolicy.googleapis.com (required so the seed project can serve as the quota project for org policy API calls)
     * APIs - Additional
       * APIs `apisAdditional`
     * No IAM Bindings
+  * Create org policies
+    * Use `org-policy` module
+    * Quota project (required for org policy API calls)
+      * Under user Application Default Credentials, `orgpolicy.googleapis.com` requires a quota project (else `Error 403: ... requires a quota project`). Use the seed project as the quota/billing project:
+        * Create a dedicated `gcp.Provider` (e.g. `seed-quota`) with `userProjectOverride: true` and `billingProject` = seed project ID, gated on `dependsOn: [seedProject]`
+        * `orgpolicy.googleapis.com` must be enabled on the seed project (see seed project hardcoded APIs)
+        * Pass this provider to the org-policy component via the `providers` (plural) option — the singular `provider` option is NOT inherited by a `ComponentResource`'s children. Also add `dependsOn: [seedProject]`
+        * Consequence: org policies must be created AFTER the seed project (and its enabled APIs), not before
+    * `orgPolicyDisableIAMExternalOrg` (optional, defaults to `true`)
+      * If `true` or not provided:
+        * Create `iam.managed.allowedPolicyMembers` policy via org-policy module with:
+          * `organisation` = config organisation ID
+          * `policyName` = `iam.managed.allowedPolicyMembers`
+          * `spec`:
+            * NOTE: `iam.managed.allowedPolicyMembers` is a **managed constraint**. Managed constraints are configured via `enforce` + a JSON `parameters` blob — NOT classic list-constraint `values`/`allowedValues`. Setting `values` (or combining `allowAll` with `values`) fails with `Error 400: Policy and Constraint must be of the same type` (and `allowAll`+`values` also violates the rule `kind` oneof).
+            ```ts
+            {
+              rules: [{
+                enforce: "TRUE",
+                parameters: JSON.stringify({
+                  allowedPrincipalSets: [`//cloudresourcemanager.googleapis.com/organizations/${organisation}`],
+                }),
+              }],
+            }
+            ```
+      * If `false`:
+        * Do not create the `iam.managed.allowedPolicyMembers` policy
+    * `orgPolicyDisableServiceAccountKeyCreation` (optional, defaults to `true`)
+      * If `true` or not provided
+        * Create `iam.managed.disableServiceAccountKeyCreation` policy via org-policy module with:
+          * `organisation` = config organisation ID
+          * `policyName` = `iam.managed.disableServiceAccountKeyCreation`
+          * `spec`:
+            * NOTE: `iam.managed.disableServiceAccountKeyCreation` is a **managed boolean constraint**. It is enforced with a single `enforce: "TRUE"` rule and takes NO `parameters` blob (unlike `iam.managed.allowedPolicyMembers`).
+            ```ts
+            {
+              rules: [{
+                enforce: "TRUE",
+              }],
+            }
+            ```
+      * If `false`:
+        * Do not create the `iam.managed.disableServiceAccountKeyCreation` policy
+    * `orgPolicyAdditional` (optional)
+      * Iterate over map entries where the key is the policy constraint name and the value contains `spec` and/or `dryRunSpec`
+      * For each entry:
+        * Validation: key (policy name) must be non-empty, at least one of `spec` or `dryRunSpec` must be provided
+        * Where map key equals `iam.managed.allowedPolicyMembers`:
+          * If `orgPolicyDisableIAMExternalOrg` is `true` (or not provided): do not create a separate policy resource. Instead, merge the entry's additional principal sets into the default policy's `parameters.allowedPrincipalSets` array before creating the single policy resource.
+          * If `orgPolicyDisableIAMExternalOrg` is `false`: create the policy using only the additional entry's spec (no default values merged).
+        * Where map key equals `iam.managed.disableServiceAccountKeyCreation`:
+          * This is a boolean constraint with no list to merge, so the additional entry overrides the flag-created default.
+          * If `orgPolicyDisableServiceAccountKeyCreation` is `true` (or not provided): do not create a separate policy resource. Instead, create the single policy resource using the additional entry's `spec`/`dryRunSpec` in place of the default `{ rules: [{ enforce: "TRUE" }] }` spec.
+          * If `orgPolicyDisableServiceAccountKeyCreation` is `false`: create the policy using only the additional entry's spec (no default enforcement applied).
+        * Otherwise, create policy via org-policy module with:
+          * `organisation` = config organisation ID
+          * `policyName` = map key
+          * `spec` = entry `spec` (if provided) — uses `gcp.orgpolicy.PolicySpec` type, passed through
+          * `dryRunSpec` = entry `dryRunSpec` (if provided) — uses `gcp.orgpolicy.PolicyDryRunSpec` type, passed through
   * Create bindings for Org Admin Google Identity group
     * Validate that `bindingsOrgAdmin.group` starts with `group:` prefix at construction time. Error if not. Only `group:` principals are accepted for this input.
     * If `bindingsOrgAdmin.sa` is provided
@@ -139,6 +217,7 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
   * ProjectSeedID
   * ProjectSeedNumericIdentifier (GCP-assigned number)
   * StorageBucketName (final bucket name with postfix)
+  * OrgPolicies (list of policy names applied, null if none)
 
 ### Identity
 
@@ -261,8 +340,12 @@ identity:principals:
 * All modules are to be `pulumi.ComponentResource` modules, not native methods / functions
   * Structure should be `modules/<module name>/index.ts`
   * The ComponentResource input interface must be named `<ModuleName>Args` (e.g. `IamArgs`)
+  * The ComponentResource type string must follow `custom:modules:<ModuleName>` (e.g. `custom:modules:Iam`)
 * Where a YAML definition is provided use as a guide, but input should be a method / function object as it will be called by an underlying stack
 * Modules are consumed by stacks via relative import and are not deployed independently. No Makefile target required.
+* Validation
+  * Syntax-level validation only at construction time — verify format and required fields are present. Do not verify resource existence; defer to GCP APIs at apply time.
+  * Validation can only check values that are resolved (plain strings) at construction time; unresolved Outputs are skipped
 * Where module supports labels
   * Merge priority (later wins on key collision): user-provided labels (passed via `labels` arg) → module-level defaults (e.g. `module: "project"`, `deployed_by: "pulumi"`)
   * Calling stacks are responsible for merging stack-level labels before passing to the module
@@ -280,7 +363,6 @@ labels:
 
 * Requirements
   * Input: a flat map of `{ [key: string]: string }` (at least one entry)
-  * Implement as a `pulumi.ComponentResource` (`Labels` class, `LabelsArgs` interface, type `custom:modules:Labels`)
   * No additional dependencies beyond `@pulumi/pulumi`
   * Sanitisation rules (applied to both keys and values):
     * Convert all characters to lowercase
@@ -304,8 +386,8 @@ Create a Pulumi module under `modules/iam` to manage IAM bindings
   * Do NOT implement IAM conditions. This is out of scope for this version.
 
 ```yaml
-organisation: <organisation ID (mutually exclusive)>
-folder: <folder ID (mutually exclusive)>
+organisation: <organisation numeric ID (mutually exclusive)>
+folder: <folder numeric ID (mutually exclusive)>
 project: <project ID (mutually exclusive)>
 resource: # (mutually exclusive)
   type: <storage | service_account>
@@ -322,9 +404,6 @@ bindings:
 * Requirements
   * Input Types
     * Target fields (`organisation`, `folder`, `project`) and `resource.identifier` must use `pulumi.Input<string>` to support receiving Outputs from other Pulumi resources
-    * Validation can only check values that are resolved (plain strings) at construction time; unresolved Outputs are skipped
-  * Validation
-    * Syntax-level validation only at construction time — verify format and required fields are present. Do not verify resource existence; defer to GCP APIs at apply time.
     * Target: exactly one of `organisation`, `folder`, `project`, `resource` must be provided
       * Error if more than one is provided OR none are provided
       * All target values are passed as-is to the GCP provider (no prefix prepending required)
@@ -348,6 +427,49 @@ bindings:
     * type
     * identifier
   * bindings (same format as was inputted)
+
+### Org Policy
+
+Create a Pulumi module under `modules/org-policy` to manage organisation policies
+
+* Accept an input based on the following YAML definition
+
+```yaml
+organisation: <organisation numeric ID (mutually exclusive)>
+folder: <folder numeric ID (mutually exclusive)>
+project: <project ID (mutually exclusive)>
+policyName: <policy name>
+spec: <policy specifications (optional, at least one of spec or dryRunSpec required)>
+dryRunSpec: <policy specifications (optional, at least one of spec or dryRunSpec required)>
+```
+
+* Requirements
+  * Input Types
+    * Target fields (`organisation`, `folder`, `project`) must use `pulumi.Input<string>` to support receiving Outputs from other Pulumi resources
+    * Target: exactly one of `organisation`, `folder`, `project` must be provided
+      * Error if more than one is provided OR none are provided
+      * Input is the numeric/string ID. Module must prepend `organizations/`, `folders/`, or `projects/` as required by the GCP API.
+    * `policyName` must be provided and non-empty. Format validation deferred to GCP API at apply time.
+    * At least one of `spec` or `dryRunSpec` must be provided. Both may be supplied simultaneously (`spec` is the enforced policy, `dryRunSpec` is for audit-mode testing).
+  * `spec` and `dryRunSpec` accept the `gcp.orgpolicy.PolicySpec` type directly. Pass through without transformation.
+  * Use `gcp.orgpolicy.Policy` pulumi resource
+  * Child resource name: `<component-name>-policy`
+  * Construct policy name and parent ID:
+    * For `organisation`
+      * Name `organizations/<organization>/policies/<policy_name>`
+      * Parent `organizations/<organization_id>`
+    * For `folder`
+      * Name `folders/<folder>/policies/<policy_name>`
+      * Parent `folders/<folder>`
+    * For `project`
+      * Name `projects/<project>/policies/<policy_name>`
+      * Parent `projects/<project>`
+* Return
+  * policyName
+  * parent (organisation, folder, or project — whichever was targeted)
+  * spec (as passed, null if not provided)
+  * dryRunSpec (as passed, null if not provided)
+
 
 ### Storage
 
@@ -383,7 +505,6 @@ labels: # (optional) - GCP resource labels (lowercase keys/values, max 63 chars)
 * Requirements
   * Input Types
     * `project` must use `pulumi.Input<string>` to support receiving Outputs from other Pulumi resources
-    * Validation can only check values that are resolved (plain strings) at construction time; unresolved Outputs are skipped
   * `name` must be provided
     * Must be 3–63 characters (or 3–58 if `postfix` is true, reserving 5 characters for `-<postfix>`)
     * Allowed characters: lowercase letters, digits, hyphens, underscores, dots
@@ -452,7 +573,6 @@ bindings: # (optional)
 * Requirements
   * Input Types
     * `organisation`, `folder` must use `pulumi.Input<string>` to support receiving Outputs from other Pulumi resources
-    * Validation can only check values that are resolved (plain strings) at construction time; unresolved Outputs are skipped
   * `name` must be provided
     * Validate display name is between 3 and 30 characters. Error if not met.
   * Exactly one of `organisation`, `folder`
@@ -501,7 +621,6 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
 * Requirements
   * Input Types
     * `organisation`, `folder`, `billing` must use `pulumi.Input<string>` to support receiving Outputs from other Pulumi resources
-    * Validation can only check values that are resolved (plain strings) at construction time; unresolved Outputs are skipped
   * `name` must be provided
     * Validate input `name` first: must be lowercase letters, digits, and hyphens only, must start with a letter, cannot end with a hyphen, and must be between 1–25 characters (reserving 5 characters for `-<postfix>`)
     * The final project ID (`<name>-<postfix>`) will be 6–30 characters and must meet GCP project ID restrictions

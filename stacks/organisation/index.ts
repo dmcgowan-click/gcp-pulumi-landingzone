@@ -1,8 +1,10 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as gcp from "@pulumi/gcp";
+import * as inputs from "@pulumi/gcp/types/input";
 import { Folder } from "../../modules/folder";
 import { Iam } from "../../modules/iam";
 import { Labels } from "../../modules/labels";
+import { OrgPolicy } from "../../modules/org-policy";
 import { Project } from "../../modules/project";
 import { Storage } from "../../modules/storage";
 
@@ -11,7 +13,10 @@ const gcpConfig = new pulumi.Config("gcp");
 
 const organisation = config.require("organisation");
 const billing = config.require("billing");
-const environments = config.requireObject<string[]>("environments");
+const environments = config.requireObject<Array<{
+    name: string;
+    bindings?: { [roleId: string]: string[] };
+}>>("environments");
 const bindingsOrgAdmin = config.requireObject<{
     group: string;
     sa?: {
@@ -21,22 +26,155 @@ const bindingsOrgAdmin = config.requireObject<{
     bindings: string[];
 }>("bindingsOrgAdmin");
 const apisAdditional = config.getObject<string[]>("apisAdditional") || [];
-const labels = config.getObject<{ [key: string]: string }>("labels") || {};
+const orgPolicyDisableIAMExternalOrg = config.getBoolean("orgPolicyDisableIAMExternalOrg") ?? true;
+const orgPolicyDisableServiceAccountKeyCreation = config.getBoolean("orgPolicyDisableServiceAccountKeyCreation") ?? true;
+const orgPolicyAdditional = config.getObject<{
+    [policyName: string]: {
+        spec?: inputs.orgpolicy.PolicySpec;
+        dryRunSpec?: inputs.orgpolicy.PolicyDryRunSpec;
+    };
+}>("orgPolicyAdditional") || {};
+const userLabels = config.getObject<{ [key: string]: string }>("labels") || {};
 const region = gcpConfig.require("region");
+
+/**
+ * Creates org policies including the managed default policies and any additional policies.
+ *
+ * @param orgId The organisation numeric ID
+ * @param disableIAMExternalOrg Whether to create the default iam.managed.allowedPolicyMembers policy (restricts IAM members to the org)
+ * @param disableServiceAccountKeyCreation Whether to create the default iam.managed.disableServiceAccountKeyCreation policy
+ * @param additional Map of additional org policies to create
+ * @param opts Resource options applied to each policy (quota project provider and dependencies)
+ * @returns List of policy names applied
+ */
+function createOrgPolicies(
+    orgId: string,
+    disableIAMExternalOrg: boolean,
+    disableServiceAccountKeyCreation: boolean,
+    additional: { [policyName: string]: { spec?: inputs.orgpolicy.PolicySpec; dryRunSpec?: inputs.orgpolicy.PolicyDryRunSpec } },
+    opts: pulumi.ComponentResourceOptions,
+): string[] {
+    const appliedPolicies: string[] = [];
+    const allowedMembersKey = "iam.managed.allowedPolicyMembers";
+    const disableSaKeyKey = "iam.managed.disableServiceAccountKeyCreation";
+
+    // Validate all additional entries up front.
+    for (const [policyName, entry] of Object.entries(additional)) {
+        if (!policyName || policyName.trim() === "") {
+            throw new Error("orgPolicyAdditional key (policy name) must be non-empty.");
+        }
+        if (!entry.spec && !entry.dryRunSpec) {
+            throw new Error(`orgPolicyAdditional entry '${policyName}' must have at least one of 'spec' or 'dryRunSpec'.`);
+        }
+    }
+
+    // iam.managed.allowedPolicyMembers (external-org restriction) — list constraint.
+    if (disableIAMExternalOrg) {
+        // iam.managed.allowedPolicyMembers is a managed constraint. Managed
+        // constraints are configured via `enforce` + a JSON `parameters` blob,
+        // not classic list-constraint `values.allowedValues`.
+        const allowedPrincipalSets = [`//cloudresourcemanager.googleapis.com/organizations/${orgId}`];
+
+        const additionalEntry = additional[allowedMembersKey];
+        if (additionalEntry?.spec) {
+            const additionalRules = (additionalEntry.spec as inputs.orgpolicy.PolicySpec).rules;
+            if (additionalRules && Array.isArray(additionalRules)) {
+                for (const rule of additionalRules) {
+                    const ruleObj = rule as inputs.orgpolicy.PolicySpecRule;
+                    const ruleValues = ruleObj.values as inputs.orgpolicy.PolicySpecRuleValues | undefined;
+                    if (ruleValues?.allowedValues) {
+                        allowedPrincipalSets.push(...(ruleValues.allowedValues as string[]));
+                    }
+                }
+            }
+        }
+
+        new OrgPolicy(`org-policy-${allowedMembersKey}`, {
+            organisation: orgId,
+            policyName: allowedMembersKey,
+            spec: {
+                rules: [{
+                    enforce: "TRUE",
+                    parameters: JSON.stringify({ allowedPrincipalSets }),
+                }],
+            },
+            dryRunSpec: additionalEntry?.dryRunSpec,
+        }, opts);
+        appliedPolicies.push(allowedMembersKey);
+    } else if (additional[allowedMembersKey]) {
+        const entry = additional[allowedMembersKey];
+        new OrgPolicy(`org-policy-${allowedMembersKey}`, {
+            organisation: orgId,
+            policyName: allowedMembersKey,
+            spec: entry.spec,
+            dryRunSpec: entry.dryRunSpec,
+        }, opts);
+        appliedPolicies.push(allowedMembersKey);
+    }
+
+    // iam.managed.disableServiceAccountKeyCreation — boolean constraint (no list
+    // to merge, so an additional entry overrides the default enforce spec).
+    if (disableServiceAccountKeyCreation) {
+        const additionalEntry = additional[disableSaKeyKey];
+        new OrgPolicy(`org-policy-${disableSaKeyKey}`, {
+            organisation: orgId,
+            policyName: disableSaKeyKey,
+            spec: additionalEntry?.spec ?? { rules: [{ enforce: "TRUE" }] },
+            dryRunSpec: additionalEntry?.dryRunSpec,
+        }, opts);
+        appliedPolicies.push(disableSaKeyKey);
+    } else if (additional[disableSaKeyKey]) {
+        const entry = additional[disableSaKeyKey];
+        new OrgPolicy(`org-policy-${disableSaKeyKey}`, {
+            organisation: orgId,
+            policyName: disableSaKeyKey,
+            spec: entry.spec,
+            dryRunSpec: entry.dryRunSpec,
+        }, opts);
+        appliedPolicies.push(disableSaKeyKey);
+    }
+
+    for (const [policyName, entry] of Object.entries(additional)) {
+        if (policyName === allowedMembersKey || policyName === disableSaKeyKey) {
+            continue;
+        }
+
+        new OrgPolicy(`org-policy-${policyName}`, {
+            organisation: orgId,
+            policyName: policyName,
+            spec: entry.spec,
+            dryRunSpec: entry.dryRunSpec,
+        }, opts);
+        appliedPolicies.push(policyName);
+    }
+
+    return appliedPolicies;
+}
 
 /**
  * Creates the common folder and one folder per environment under the organisation.
  *
  * @param orgId The organisation numeric ID
- * @param envNames List of environment names to create folders for
+ * @param envs List of environment entries (name and optional folder IAM bindings)
  * @returns Map of folder name to Folder component
  */
 function createFolders(
     orgId: string,
-    envNames: string[],
+    envs: Array<{ name: string; bindings?: { [roleId: string]: string[] } }>,
 ): { [name: string]: Folder } {
-    if (!envNames || envNames.length === 0) {
+    if (!envs || envs.length === 0) {
         throw new Error("At least one environment entry must be declared. 'environments' is empty or missing.");
+    }
+
+    const seen = new Set<string>();
+    for (const env of envs) {
+        if (!env.name || env.name.trim() === "") {
+            throw new Error("Each environment entry must have a non-empty 'name'.");
+        }
+        if (seen.has(env.name)) {
+            throw new Error(`Duplicate environment name '${env.name}'. Environment names must be unique.`);
+        }
+        seen.add(env.name);
     }
 
     const folders: { [name: string]: Folder } = {};
@@ -46,10 +184,11 @@ function createFolders(
         name: "common",
     });
 
-    for (const env of envNames) {
-        folders[env] = new Folder(`env-${env}`, {
+    for (const env of envs) {
+        folders[env.name] = new Folder(`env-${env.name}`, {
             organisation: orgId,
-            name: env,
+            name: env.name,
+            bindings: env.bindings,
         });
     }
 
@@ -62,6 +201,7 @@ function createFolders(
  * @param commonFolderId The common folder numeric ID
  * @param billingAccount The billing account ID
  * @param mergedLabels Labels merged from sanitised user labels and stack defaults
+ * @param additionalApis Additional APIs to enable beyond the hardcoded set
  * @returns The Project component
  */
 function createSeedProject(
@@ -74,6 +214,7 @@ function createSeedProject(
         "cloudresourcemanager.googleapis.com",
         "cloudbilling.googleapis.com",
         "iam.googleapis.com",
+        "orgpolicy.googleapis.com",
     ];
     const apis = [...new Set([...hardcodedApis, ...additionalApis])];
 
@@ -163,13 +304,32 @@ function createStateBucket(
 
 const folders = createFolders(organisation, environments);
 
-const labelsModule = new Labels("org-labels", { labels });
+const labelsModule = new Labels("org-labels", { labels: userLabels });
 const mergedLabels = labelsModule.labels.apply((sanitised): { [key: string]: string } => ({
     ...sanitised,
     stack: "organisation",
 }));
 
 const seedProject = createSeedProject(folders["common"].folderId, billing, mergedLabels, apisAdditional);
+
+// Org policy API calls with user ADC require a quota project. Use the seed
+// project as the quota/billing project, ensuring it (and its enabled
+// orgpolicy.googleapis.com API) is provisioned first.
+const seedQuotaProvider = new gcp.Provider("seed-quota", {
+    billingProject: seedProject.projectId,
+    userProjectOverride: true,
+}, { dependsOn: [seedProject] });
+
+const orgPolicies = createOrgPolicies(
+    organisation,
+    orgPolicyDisableIAMExternalOrg,
+    orgPolicyDisableServiceAccountKeyCreation,
+    orgPolicyAdditional,
+    {
+        providers: [seedQuotaProvider],
+        dependsOn: [seedProject],
+    },
+);
 
 const saEnabled = bindingsOrgAdmin.sa?.enabled === true;
 const saName = bindingsOrgAdmin.sa?.name || "cicd-org";
@@ -207,3 +367,4 @@ export const projectSeedName = seedProject.projectDisplayName;
 export const projectSeedId = seedProject.projectId;
 export const projectSeedNumericIdentifier = seedProject.projectNumber;
 export const storageBucketName = stateBucket.bucketName;
+export const orgPoliciesOutput = orgPolicies.length > 0 ? orgPolicies : null;

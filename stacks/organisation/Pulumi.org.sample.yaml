@@ -3,8 +3,12 @@ config:
   organisation:organisation: "<organisation numeric ID>"
   organisation:billing: "<billing account id (format: XXXXXX-XXXXXX-XXXXXX)>"
   organisation:environments:
-    - <environment name a>
-    - <environment name b>
+    - name: <environment name a>
+      bindings: # (optional) - IAM bindings applied to this environment's folder
+        <role_id_a>:
+          - <principal a>
+          - <principal b>
+    - name: <environment name b>
   organisation:bindingsOrgAdmin:
     group: "<group:email@domain>"
     sa: # (optional)
@@ -15,5 +19,11 @@ config:
       - <role_id_b>
   organisation:apisAdditional: # (optional)
     - <additional api>
+  organisation:orgPolicyDisableIAMExternalOrg: true # (optional, defaults to true)
+  organisation:orgPolicyDisableServiceAccountKeyCreation: true # (optional, defaults to true)
+  # organisation:orgPolicyAdditional: # (optional)
+  #   <policy constraint name>:
+  #     spec: <policy spec>
+  #     dryRunSpec: <dry run policy spec>
   organisation:labels: # (optional) - GCP project labels (keys/values: lowercase, digits, underscores, hyphens only; max 63 chars)
     <key>: <value>
