@@ -64,6 +64,8 @@ If any of these cannot be determined from the STC, flag it as a review finding a
 
 NOTE: Sensible environment-specific inputs (org ID, domain, project ID, etc.) are fine — these can never be predefined and will be unique to each environment.
 
+Do not flag 
+
 #### If action is generate
 
 Review the STC, if potential ambiguity or design issues, report back and offer to perform a `review` action first.

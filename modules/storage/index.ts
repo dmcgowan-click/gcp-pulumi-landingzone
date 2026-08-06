@@ -7,7 +7,7 @@ import { Iam } from "../iam";
  * Input arguments for the Storage module.
  * Exactly one of location, locationDual, or locationMulti must be provided.
  *
- * @param name The storage bucket name (3-63 chars, or 3-58 if postfix is true)
+ * @param name The storage bucket name (3-63 chars, or 3-58 if postfix is true). May be a pulumi.Input<string> (e.g. derived from a project ID Output); construction-time validation is skipped for unresolved Outputs.
  * @param postfix Whether to append a random 4-char hex postfix to the bucket name
  * @param project The GCP project ID string to create the bucket in
  * @param location A single GCP region (mutually exclusive with locationDual and locationMulti)
@@ -20,7 +20,7 @@ import { Iam } from "../iam";
  * @param labels Optional labels to apply to the bucket (merged with module defaults)
  */
 export interface StorageArgs {
-    name: string;
+    name: pulumi.Input<string>;
     postfix?: boolean;
     project: pulumi.Input<string>;
     location?: string;
@@ -176,22 +176,26 @@ export class Storage extends pulumi.ComponentResource {
         const maxNameLength = usePostfix ? 58 : 63;
         const nameRegex = /^[a-z0-9][a-z0-9._-]*[a-z0-9]$/;
 
-        if (!args.name || args.name.length < 3 || args.name.length > maxNameLength) {
-            throw new Error(
-                `Bucket name must be between 3 and ${maxNameLength} characters. Got ${args.name ? args.name.length : 0} characters.`
-            );
-        }
+        // Name validation only applies to resolved plain strings. Unresolved
+        // Outputs (e.g. a bucket name derived from a project ID) are skipped.
+        if (typeof args.name === "string") {
+            if (!args.name || args.name.length < 3 || args.name.length > maxNameLength) {
+                throw new Error(
+                    `Bucket name must be between 3 and ${maxNameLength} characters. Got ${args.name ? args.name.length : 0} characters.`
+                );
+            }
 
-        if (args.name.length < 3 || !nameRegex.test(args.name)) {
-            throw new Error(
-                `Bucket name must contain only lowercase letters, digits, hyphens, underscores, and dots, and must start and end with a lowercase letter or digit. Got '${args.name}'.`
-            );
-        }
+            if (args.name.length < 3 || !nameRegex.test(args.name)) {
+                throw new Error(
+                    `Bucket name must contain only lowercase letters, digits, hyphens, underscores, and dots, and must start and end with a lowercase letter or digit. Got '${args.name}'.`
+                );
+            }
 
-        if (args.name.startsWith("goog") || args.name.includes("google")) {
-            throw new Error(
-                `Bucket name must not contain the prefix 'goog' or the string 'google'. Got '${args.name}'.`
-            );
+            if (args.name.startsWith("goog") || args.name.includes("google")) {
+                throw new Error(
+                    `Bucket name must not contain the prefix 'goog' or the string 'google'. Got '${args.name}'.`
+                );
+            }
         }
 
         const locationTargets = [args.location, args.locationDual, args.locationMulti].filter(

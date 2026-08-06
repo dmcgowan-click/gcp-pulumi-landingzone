@@ -57,15 +57,20 @@ prepare-infra: _check-vars ## [auto] Sync Pulumi code and install deps (called b
 		ln -sfn $(PULUMI_DIR)/$(STACK_DIR)/node_modules $(PULUMI_DIR)/modules/node_modules; \
 	fi
 
+# Stacks using @pulumi/googleworkspace store a short-lived access token in
+# Pulumi state. --refresh would fail with ACCESS_TOKEN_EXPIRED on stale state,
+# so we only add --refresh for stacks that don't use that provider.
+REFRESH_FLAG = $(if $(shell grep -q '"@pulumi/googleworkspace"' $(PULUMI_DIR)/$(STACK_DIR)/package.json 2>/dev/null && echo yes),,--refresh)
+
 preview-infra: prepare-infra ## Preview infrastructure changes
 	$(call pulumi_login)
 	cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi stack select $(PULUMI_STACK) --create 2>/dev/null; \
-	pulumi preview --refresh
+	pulumi preview $(REFRESH_FLAG)
 
 up-infra: prepare-infra ## Deploy infrastructure with Pulumi
 	$(call pulumi_login)
 	cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi stack select $(PULUMI_STACK) --create 2>/dev/null; \
-	pulumi up --yes --refresh
+	pulumi up --yes $(REFRESH_FLAG)
 
 migrate-state: _check-vars ## Migrate local Pulumi state to GCS backend (reads bucket from state.yaml)
 	@test -f "$(STACK_DIR)/state.yaml" || (echo "ERROR: $(STACK_DIR)/state.yaml not found. Create it with the GCS bucket name from stack outputs." && exit 1)

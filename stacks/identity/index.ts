@@ -13,7 +13,8 @@ const principals = config.requireObject<{
     groups?: {
         name: string;
         description?: string;
-        users: { emailPrimaryId: string }[];
+        users?: { emailPrimaryId: string }[];
+        groups?: { emailPrimaryId: string }[];
     }[];
     users?: {
         firstName: string;
@@ -62,13 +63,26 @@ if (principals.groups) {
         if (!group.name) {
             throw new Error(`Each group entry must have 'name'. Got: ${JSON.stringify(group)}`);
         }
-        if (!group.users || group.users.length === 0) {
-            throw new Error(`Each group entry must have at least one user in 'users'. Group '${group.name}' has none.`);
+        const hasGroupUsers = group.users && group.users.length > 0;
+        const hasGroupGroups = group.groups && group.groups.length > 0;
+        if (!hasGroupUsers && !hasGroupGroups) {
+            throw new Error(`Each group entry must have at least one member in 'users' or 'groups'. Group '${group.name}' has none.`);
+        }
+        if (group.groups) {
+            for (const g of group.groups) {
+                if (g.emailPrimaryId.includes("@")) {
+                    throw new Error(`'groups[].groups[].emailPrimaryId' must not contain '@'. Got: '${g.emailPrimaryId}'`);
+                }
+            }
         }
     }
 }
 
 // --- Credential Flow ---
+// The Google Workspace provider needs DWD via a service account. We mint a
+// fresh SA access token at runtime and pass it with serviceAccount so the
+// provider can call SignJwt. Do NOT use --refresh — the short-lived token
+// stored in state will cause ACCESS_TOKEN_EXPIRED errors.
 
 const oauthScopes = [
     "https://www.googleapis.com/auth/admin.directory.user",
@@ -157,18 +171,79 @@ function createGroups(
         return groups;
     }
 
+    // Determine which group names are referenced as members in other groups' groups[] arrays
+    const referencedAsGroupMember = new Set<string>();
     for (const groupCfg of cfg) {
-        const group = new googleworkspace.Group(`group-${groupCfg.name}`, {
-            email: `${groupCfg.name}@${domain}`,
-            description: groupCfg.description,
-        }, { provider });
+        if (groupCfg.groups) {
+            for (const g of groupCfg.groups) {
+                referencedAsGroupMember.add(g.emailPrimaryId);
+            }
+        }
+    }
 
-        for (const memberCfg of groupCfg.users) {
+    // List one: groups whose name appears in another group's groups[] — create first
+    const listOne = cfg.filter(g => referencedAsGroupMember.has(g.name));
+    // List two: groups whose name does NOT appear in another group's groups[] — create after
+    const listTwo = cfg.filter(g => !referencedAsGroupMember.has(g.name));
+
+    for (const groupCfg of listOne) {
+        groups[groupCfg.name] = createSingleGroup(groupCfg, provider, users, {});
+    }
+
+    for (const groupCfg of listTwo) {
+        groups[groupCfg.name] = createSingleGroup(groupCfg, provider, users, groups);
+    }
+
+    return groups;
+}
+
+/**
+ * Creates a single group and its memberships.
+ *
+ * @param groupCfg The group config entry
+ * @param provider The Google Workspace provider instance
+ * @param users Map of created user resources
+ * @param existingGroups Map of already-created group resources (for dependsOn on group members)
+ * @returns The created Group resource
+ */
+function createSingleGroup(
+    groupCfg: NonNullable<typeof principals.groups>[number],
+    provider: googleworkspace.Provider,
+    users: { [emailPrimaryId: string]: googleworkspace.User },
+    existingGroups: { [name: string]: googleworkspace.Group },
+): googleworkspace.Group {
+    const group = new googleworkspace.Group(`group-${groupCfg.name}`, {
+        email: `${groupCfg.name}@${domain}`,
+        description: groupCfg.description,
+    }, { provider });
+
+    // Assign user members
+    for (const memberCfg of groupCfg.users || []) {
+        const memberEmail = `${memberCfg.emailPrimaryId}@${domain}`;
+        const dependsOn: pulumi.Resource[] = [];
+
+        if (users[memberCfg.emailPrimaryId]) {
+            dependsOn.push(users[memberCfg.emailPrimaryId]);
+        }
+
+        new googleworkspace.GroupMember(
+            `group-${groupCfg.name}-member-${memberCfg.emailPrimaryId}`,
+            {
+                groupId: group.id,
+                email: memberEmail,
+            },
+            { provider, dependsOn },
+        );
+    }
+
+    // Assign group members
+    if (groupCfg.groups) {
+        for (const memberCfg of groupCfg.groups) {
             const memberEmail = `${memberCfg.emailPrimaryId}@${domain}`;
             const dependsOn: pulumi.Resource[] = [];
 
-            if (users[memberCfg.emailPrimaryId]) {
-                dependsOn.push(users[memberCfg.emailPrimaryId]);
+            if (existingGroups[memberCfg.emailPrimaryId]) {
+                dependsOn.push(existingGroups[memberCfg.emailPrimaryId]);
             }
 
             new googleworkspace.GroupMember(
@@ -176,15 +251,14 @@ function createGroups(
                 {
                     groupId: group.id,
                     email: memberEmail,
+                    type: "GROUP",
                 },
                 { provider, dependsOn },
             );
         }
-
-        groups[groupCfg.name] = group;
     }
 
-    return groups;
+    return group;
 }
 
 // --- Main Execution ---
@@ -194,7 +268,7 @@ const createdGroups = createGroups(principals.groups, wsProvider, createdUsers);
 
 // --- Stack Outputs ---
 
-export const usersOutput = pulumi.output(
+export const users = pulumi.output(
     Object.fromEntries(
         Object.entries(createdUsers).map(([id, user]) => [
             id,
@@ -203,7 +277,7 @@ export const usersOutput = pulumi.output(
     )
 );
 
-export const groupsOutput = pulumi.output(
+export const groups = pulumi.output(
     Object.fromEntries(
         Object.entries(createdGroups).map(([name, group]) => [
             name,
