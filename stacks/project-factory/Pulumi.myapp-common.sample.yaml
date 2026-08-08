@@ -1,0 +1,19 @@
+name: "<project name base (combined with environment to form project ID)>"
+apis: # (optional)
+  - <api.googleapis.com>
+bindingsPowerUserConfig: # (optional)
+  sa: # (optional)
+    enabled: <true|false>
+    name: <service account name (optional, defaults to cicd-<name>-<environment>)>
+  bindings:
+    - <role_id_a>
+    - <role_id_b>
+  bindingProjectIAM: # (optional)
+    - <role_id_a>
+bindingsROUserConfig: # (optional)
+  bindings:
+    - <role_id_a>
+    - <role_id_b>
+stateBucket: true # (optional, defaults to true)
+labels: # (optional) - GCP project labels (keys/values: lowercase, digits, underscores, hyphens only; max 63 chars)
+  <key>: <value>

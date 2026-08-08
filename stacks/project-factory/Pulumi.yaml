@@ -1,0 +1,6 @@
+name: project-factory
+runtime:
+  name: nodejs
+  options:
+    typescript: true
+description: GCP Pulumi LandingZone - Project Factory

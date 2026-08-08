@@ -1,0 +1,18 @@
+config:
+  # project-factory:bindingsPowerUserConfig: # (optional - takes priority over initiative common)
+  #   sa:
+  #     enabled: <true|false>
+  #     name: <service account name (optional, defaults to cicd-<name>-<environment>)>
+  #   bindings:
+  #     - <role_id_a>
+  #   bindingProjectIAM:
+  #     - <role_id_a>
+  
+  project-factory:bindingsPowerUserPrincipal: "<group:email@domain>" # (Required where bindingsPowerUserConfig provided)
+  # project-factory:bindingsROUserConfig: # (optional - takes priority over initiative common)
+  #   bindings:
+  #     - <role_id_a>
+  project-factory:bindingsROUserPrincipal: "<group:email@domain>" # (Required where bindingsROUserConfig provided)
+  # project-factory:stateBucket: true # (optional - takes priority over initiative common, defaults to true)
+  project-factory:labels: # (optional) - GCP project labels (keys/values: lowercase, digits, underscores, hyphens only; max 63 chars)
+    <key>: <value>

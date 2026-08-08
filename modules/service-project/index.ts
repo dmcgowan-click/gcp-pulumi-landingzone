@@ -131,8 +131,8 @@ export class ServiceProject extends pulumi.ComponentResource {
         // Optional CICD power-user service account, hosted in the seed project.
         let powerUserSaEmail: pulumi.Output<string> | undefined;
         if (args.bindingsPowerUser?.sa?.enabled) {
-            const saName = args.bindingsPowerUser.sa.name ?? `cicd-${args.name}`;
-            const description = `Service Account for ${args.name}. Project wide bindings on this project`;
+            const saName = args.bindingsPowerUser.sa.name ?? `cicd-${args.name}-${args.environment}`;
+            const description = `Service Account for ${args.name}-${args.environment}. Project wide bindings on this project`;
             const sa = new gcp.serviceaccount.Account(`${name}-poweruser-sa`, {
                 project: args.seedProjectID,
                 accountId: saName,

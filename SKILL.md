@@ -62,9 +62,10 @@ The STC definition should be self-sufficient to determine:
 
 If any of these cannot be determined from the STC, flag it as a review finding and suggest how to make the definition explicit.
 
-NOTE: Sensible environment-specific inputs (org ID, domain, project ID, etc.) are fine — these can never be predefined and will be unique to each environment.
+Additional Context:
 
-Do not flag 
+* Sensible environment-specific inputs (org ID, domain, project ID, etc.) are fine — these can never be predefined and will be unique to each environment. Do not flag as a review item
+* Checking actual generated source code and config files is valid for the purpose of diff, but don't flag discrepancies as a review finding — the STC is the source of truth, not the generated code. The generated code may be out of date or have been modified by hand, so it is not a reliable source of truth.
 
 #### If action is generate
 

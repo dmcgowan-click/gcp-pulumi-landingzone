@@ -22,6 +22,16 @@
     * Pass `pulumi.Output<string>` values directly to resource arguments that accept `pulumi.Input<string>`
     * Since the majority of inputs to modules come from other created resources (and are therefore Outputs), modules must be designed to accept `pulumi.Input<string>` for any field that might receive a resource output
 
+## Conventions
+
+Reusable rules referenced throughout by tag. Apply wherever referenced.
+
+* **[CONV-INPUT]** — Fields that may receive Outputs from other resources must use `pulumi.Input<string>` (or `pulumi.Input<string>[]` for arrays). Construction-time validation is skipped for unresolved Outputs.
+* **[CONV-EXCLUSIVE]** — Exactly one of the listed target fields must be provided. Error if more than one is provided OR none are provided.
+* **[CONV-VALIDATE-API]** — Format/existence validation deferred to GCP API at apply time. Only syntax-level checks at construction time.
+* **[CONV-POSTFIX]** — A 4-character lowercase hexadecimal postfix (`0-9a-f`). Use `@pulumi/random` `RandomId` with `byteLength: 2`. Access via `.hex` (NOT `.dec` or `.b64Std`). Must NOT regenerate once created — use `keepers` tied to the resource name for stability.
+* **[CONV-LABELS]** — Label validation at construction time: keys must match `^[a-z][a-z0-9_-]*$`, values must match `^[a-z0-9_-]*$`, both max 63 chars. Error with descriptive message if invalid. The `labels` arg receives pre-merged labels from the calling stack. Module merges with its own defaults (module defaults win on key collision).
+
 ## Stacks
 
 * Use `@pulumi/gcp`, `@pulumi/pulumi` unless otherwise specified
@@ -575,25 +585,24 @@ conditions: # (optional)
 
 * Requirements
   * Input Types
-    * Target fields (`organisation`, `folder`, `project`) and `resource.identifier` must use `pulumi.Input<string>` to support receiving Outputs from other Pulumi resources
-    * Target: exactly one of `organisation`, `folder`, `project`, `resource` must be provided
-      * Error if more than one is provided OR none are provided
+    * Target fields (`organisation`, `folder`, `project`) and `resource.identifier`: [CONV-INPUT]
+    * Target: exactly one of `organisation`, `folder`, `project`, `resource` must be provided [CONV-EXCLUSIVE]
       * All target values are passed as-is to the GCP provider (no prefix prepending required)
     * For `resource`
       * `type` must be provided
         * Supported values: `storage`, `service_account`
         * If anything else, error with message: `"Unsupported resource type '<type>'. Must be one of: storage, service_account"`
-      * `identifier` must be provided (non-empty). Format validation deferred to GCP API at apply time.
+      * `identifier` must be provided (non-empty). [CONV-VALIDATE-API]
     * `bindings` must be provided with at least one role entry
-      * `<role_id>` format is not validated client-side; defer to GCP API at apply time
+      * `<role_id>` format: [CONV-VALIDATE-API]
       * Each role must have at least one principal
       * Principal must start with one of: `user:`, `group:`, `serviceAccount:`, `domain:`
-      * `bindings` principal arrays accept `pulumi.Input<string>[]` to support receiving Outputs (e.g. service account emails constructed via `pulumi.interpolate`)
+      * `bindings` principal arrays: [CONV-INPUT] (e.g. service account emails constructed via `pulumi.interpolate`)
     * `conditions` is optional. Where provided, each entry must contain:
       * `role` must be provided and match a role defined in `bindings`
       * `title` must be provided and validated client-side: must be non-empty, max 100 characters, must match `^[a-zA-Z0-9_. -]+$`
       * `description` is optional
-      * `expression` must be provided (CEL expression). Format validation deferred to GCP API at apply time.
+      * `expression` must be provided (CEL expression). [CONV-VALIDATE-API]
       * `members` must be provided as a non-empty list. Each member must match a principal assigned to the corresponding role in `bindings`
   * Resource Naming
     * Child Pulumi resource names must follow `<component-name>-<roleId>-<principal>` with `/` and `:` replaced by `-`
@@ -624,11 +633,10 @@ dryRunSpec: <policy specifications (optional, at least one of spec or dryRunSpec
 
 * Requirements
   * Input Types
-    * Target fields (`organisation`, `folder`, `project`) must use `pulumi.Input<string>` to support receiving Outputs from other Pulumi resources
-    * Target: exactly one of `organisation`, `folder`, `project` must be provided
-      * Error if more than one is provided OR none are provided
+    * Target fields (`organisation`, `folder`, `project`): [CONV-INPUT]
+    * Target: exactly one of `organisation`, `folder`, `project` must be provided [CONV-EXCLUSIVE]
       * Input is the numeric/string ID. Module must prepend `organizations/`, `folders/`, or `projects/` as required by the GCP API.
-    * `policyName` must be provided and non-empty. Format validation deferred to GCP API at apply time.
+    * `policyName` must be provided and non-empty. [CONV-VALIDATE-API]
     * At least one of `spec` or `dryRunSpec` must be provided. Both may be supplied simultaneously (`spec` is the enforced policy, `dryRunSpec` is for audit-mode testing).
   * `spec` and `dryRunSpec` accept the `gcp.orgpolicy.PolicySpec` type directly. Pass through without transformation.
   * Use `gcp.orgpolicy.Policy` pulumi resource
@@ -683,8 +691,7 @@ labels: # (optional) - GCP resource labels (lowercase keys/values, max 63 chars)
 
 * Requirements
   * Input Types
-    * `project` must use `pulumi.Input<string>` to support receiving Outputs from other Pulumi resources
-    * `name` must use `pulumi.Input<string>` to support receiving Outputs from other Pulumi resources (e.g. a bucket name derived from a project ID). Construction-time name validation is skipped for unresolved Outputs (only resolved plain strings are validated).
+    * `project`, `name`: [CONV-INPUT]. Construction-time name validation is skipped for unresolved Outputs (only resolved plain strings are validated).
   * `name` must be provided
     * Must be 3–63 characters (or 3–58 if `postfix` is true, reserving 5 characters for `-<postfix>`)
     * Allowed characters: lowercase letters, digits, hyphens, underscores, dots
@@ -693,14 +700,10 @@ labels: # (optional) - GCP resource labels (lowercase keys/values, max 63 chars)
     * Error with descriptive message if validation fails
   * `postfix` is optional. Must be true or false. Default to false
     * Where true:
-      * `postfix` is a 4-character lowercase hexadecimal string (characters `0-9a-f` only)
-      * Use `@pulumi/random` `RandomId` with `byteLength: 2` — this produces exactly 4 hex characters
-      * Access the hex output via `.hex` (NOT `.dec` or `.b64Std`)
-      * The postfix must NOT be regenerated once created — use `keepers` tied to the bucket `name` to ensure stability across re-runs
+      * Apply [CONV-POSTFIX] with `keepers` tied to the bucket `name`
       * The postfix is appended to the bucket name `<name>-<postfix>`. Cater for this with name validation
   * `project` must be provided. Must be a GCP project ID string (e.g. `my-project-a1b2`), not a numeric project number
-  * Exactly one of `location`, `location_dual`, or `location_multi` must be provided
-    * Error if more than one is provided OR none are provided
+  * Exactly one of `location`, `location_dual`, or `location_multi` must be provided [CONV-EXCLUSIVE]
     * `location` — a single string representing a valid GCP region (e.g. `australia-southeast1`)
     * `location_dual` — a list of exactly 2 valid GCP regions. Error if not exactly 2 entries are provided
     * `location_multi` — one of `US`, `EU`, or `ASIA` (case-insensitive input, stored uppercase)
@@ -718,11 +721,7 @@ labels: # (optional) - GCP resource labels (lowercase keys/values, max 63 chars)
           * identifier = bucket name
         * bindings = bindings
   * `labels` is optional
-    * GCP storage buckets support labels (key-value pairs for cost tracking and resource filtering)
-    * The `labels` arg receives pre-merged labels from the calling stack
-    * Module merges with its own defaults: `{ module: "storage", deployed_by: "pulumi" }` — module defaults win on key collision
-    * Label keys/values must be lowercase, max 63 characters, keys must start with a lowercase letter
-    * Validate labels at construction time: keys must match `^[a-z][a-z0-9_-]*$`, values must match `^[a-z0-9_-]*$`, both max 63 chars. Error with descriptive message if invalid.
+    * Apply [CONV-LABELS] with module defaults: `{ module: "storage", deployed_by: "pulumi" }`
 * Return
   * bucketName — `pulumi.Output<string>` — final name, including postfix if applicable
   * location — `pulumi.Output<string>` — the resolved bucket location
@@ -752,17 +751,16 @@ bindings: # (optional)
 
 * Requirements
   * Input Types
-    * `organisation`, `folder` must use `pulumi.Input<string>` to support receiving Outputs from other Pulumi resources
+    * `organisation`, `folder`: [CONV-INPUT]
   * `name` must be provided
     * Validate display name is between 3 and 30 characters. Error if not met.
-  * Exactly one of `organisation`, `folder`
-    * Error if more than one is provided OR none are provided
+  * Exactly one of `organisation`, `folder` [CONV-EXCLUSIVE]
     * Input is the numeric ID. Module must prepend `organizations/` or `folders/` as required by the GCP API.
     * For `organisation`
       * Create folder under provided organisation
     * For `folder`
       * Create folder under provided parent folder
-  * `bindings` is optional. Principal arrays accept `pulumi.Input<string>[]` to support receiving Outputs.
+  * `bindings` is optional. Principal arrays: [CONV-INPUT].
     * If bindings is provided
       * Use the `iam` module
       * Inputs
@@ -800,25 +798,21 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
 
 * Requirements
   * Input Types
-    * `organisation`, `folder`, `billing` must use `pulumi.Input<string>` to support receiving Outputs from other Pulumi resources
+    * `organisation`, `folder`, `billing`: [CONV-INPUT]
   * `name` must be provided
     * Validate input `name` first: must be lowercase letters, digits, and hyphens only, must start with a letter, cannot end with a hyphen, and must be between 1–25 characters (reserving 5 characters for `-<postfix>`)
     * The final project ID (`<name>-<postfix>`) will be 6–30 characters and must meet GCP project ID restrictions
   * Naming convention as follows
     * `<name>-<postfix>`
-      * `postfix` is a 4-character lowercase hexadecimal string (characters `0-9a-f` only)
-        * Use `@pulumi/random` `RandomId` with `byteLength: 2` — this produces exactly 4 hex characters
-        * Access the hex output via `.hex` (NOT `.dec` or `.b64Std`)
-        * The postfix must NOT be regenerated once created — use `keepers` tied to the project `name` to ensure stability across re-runs
-  * Exactly one of `organisation`, `folder`
-    * Error if more than one is provided OR none are provided
+      * Apply [CONV-POSTFIX] with `keepers` tied to the project `name`
+  * Exactly one of `organisation`, `folder` [CONV-EXCLUSIVE]
     * Input is the numeric ID. Module must prepend `organizations/` or `folders/` as required by the GCP API.
     * For `organisation`
       * Create project under provided organisation
     * For `folder`
       * Create project under provided parent folder
   * `billing` must be provided
-    * Validation deferred to GCP API at apply time
+    * [CONV-VALIDATE-API]
     * Assign project to provided billing ID
   * `apis` must contain at least one entry
     * Use `gcp.projects.Service` for each API
@@ -836,11 +830,7 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
         * project = created project ID
         * bindings = bindings
   * `labels` is optional
-    * GCP projects support labels (key-value pairs for cost tracking and resource filtering)
-    * The `labels` arg receives pre-merged labels from the calling stack
-    * Module merges with its own defaults: `{ module: "project", deployed_by: "pulumi" }` — module defaults win on key collision
-    * Label keys/values must be lowercase, max 63 characters, keys must start with a lowercase letter
-    * Validate labels at construction time: keys must match `^[a-z][a-z0-9_-]*$`, values must match `^[a-z0-9_-]*$`, both max 63 chars. Error with descriptive message if invalid.
+    * Apply [CONV-LABELS] with module defaults: `{ module: "project", deployed_by: "pulumi" }`
 * Return
   * projectDisplayName — `pulumi.Output<string>` — the project display name
   * projectId — `pulumi.Output<string>` — the `<name>-<postfix>` string
@@ -890,7 +880,7 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
 
 * Requirements
   * Input Types
-    * `organisation`, `billing`, `seedProjectID` must use `pulumi.Input<string>` to support receiving Outputs from other Pulumi resources (e.g. the `organisation` stack)
+    * `organisation`, `billing`, `seedProjectID`: [CONV-INPUT]
     * `environment` must be a plain `string` (not an Output) — it is consumed at construction time to resolve the environment folder ID
     * `bindingsPowerUser.bindingProjectIAM` is optional. Where provided, it is a list of role IDs (`string[]`) that the group (and SA if enabled) are permitted to grant via `roles/resourcemanager.projectIamAdmin`. Must not be empty if provided.
     * `bindingsPowerUser.bindings` must not contain `roles/resourcemanager.projectIamAdmin`. Validate at `ServiceProject` construction time. Error message: `"For roles/resourcemanager.projectIamAdmin, use bindingProjectIAM and provide a list of permitted roles."`
@@ -918,8 +908,8 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
         * Create a service account using `gcp.serviceaccount.Account`
         * Create under the seed project (`seedProjectID`)
           * NOTE: This is not a typo, keeping the SA here provides an additional layer of protection from deletion and modification
-        * Name: `bindingsPowerUser.sa.name` if provided, otherwise default to `cicd-<name>`. Validation deferred to GCP API at apply time.
-        * Description: `Service Account for <name>. Project wide bindings on this project`
+        * Name: `bindingsPowerUser.sa.name` if provided, otherwise default to `cicd-<name>-<environment>`. Validation deferred to GCP API at apply time.
+        * Description: `Service Account for <name>-<environment>. Project wide bindings on this project`
     * Use `iam` module
       * Assign bindings to the project
       * For `bindings`
@@ -964,11 +954,7 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
         * Assign `roles/storage.objectViewer` to (where present)
           * `bindingsROUser.group`
   * `labels` is optional
-    * GCP projects support labels (key-value pairs for cost tracking and resource filtering)
-    * The `labels` arg receives pre-merged labels from the calling stack
-    * Merge order (later wins on key collision): user labels → service-project default `{ environment: "<environment>" }` → parent `Project` module defaults `{ module: "project", deployed_by: "pulumi" }`. Service Project merges its `{ environment }` default, then passes the result to the internal `Project` module, which applies its own defaults.
-    * Label keys/values must be lowercase, max 63 characters, keys must start with a lowercase letter
-    * Validate labels at construction time: keys must match `^[a-z][a-z0-9_-]*$`, values must match `^[a-z0-9_-]*$`, both max 63 chars. Error with descriptive message if invalid.
+    * Apply [CONV-LABELS]. Merge order (later wins): user labels → service-project default `{ environment: "<environment>" }` → parent `Project` module defaults `{ module: "project", deployed_by: "pulumi" }`. Service Project merges its `{ environment }` default, then passes the result to the internal `Project` module, which applies its own defaults.
 * Return
   * projectDisplayName — `pulumi.Output<string>` — the project display name
   * projectId — `pulumi.Output<string>` — the `<name>-<environment>-<postfix>` string

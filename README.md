@@ -48,18 +48,22 @@ The Makefile provides the primary interface for infrastructure operations and su
 
 | Target | Description |
 |--------|-------------|
+| `make dev-setup` | Install root node_modules for editor type resolution (also generates Google Workspace SDK if needed) |
 | `make preview-infra` | Preview infrastructure changes |
 | `make up-infra` | Deploy infrastructure with Pulumi |
-| `make dev-setup` | Set up local development environment |
+| `make migrate-state` | Migrate local Pulumi state to GCS backend (reads bucket from `state.yaml`) |
 
 **Variables:**
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `STACK_NAME` | `organisation` | Stack to operate on (e.g. `organisation`, `identity`) |
+| `STACK_DIR` | *(required)* | Stack directory to operate on (e.g. `stacks/organisation`, `stacks/identity`) |
 | `STACK_ENV` | `org` | Environment/stack selector for Pulumi |
+| `GCP_REGION` | `australia-southeast1` | GCP region |
+| `PULUMI_STACK` | `$(STACK_ENV)` | Pulumi stack name |
+| `GWS_PROVIDER_VERSION` | `0.7.0` | Google Workspace bridged Terraform provider version |
 
-Set `PULUMI_STATE_BUCKET` to use a GCS backend for state; otherwise Pulumi defaults to local state.
+**State backend** priority: `state.yaml` in the stack directory > `PULUMI_STATE_BUCKET` env var > local state.
 
 ### Standard Template Constructs (STC)
 
@@ -89,9 +93,21 @@ Uses the shared `folder`, `iam`, `project`, `storage`, and `labels` modules.
 Located in `stacks/identity/`, this stack manages Google Workspace users and groups via `@pulumi/googleworkspace` using domain-wide delegation. It provisions:
 
 - **Users** — creates Google Workspace users with auto-generated passwords (secrets), recovery contacts, and forced password change on first login
-- **Groups** — creates groups and assigns memberships with proper dependency ordering
+- **Groups** — creates groups and assigns memberships with proper dependency ordering. Groups can contain both user and group members (nested groups); groups referenced as members of other groups are created first to satisfy dependencies
 
 Requires a service account with domain-wide delegation (created by the Organisation stack) and the Admin SDK API enabled on the seed project. See `stacks/identity/Pulumi.org.sample.yaml` for config template.
+
+### Project Factory Stack
+
+Located in `stacks/project-factory/`, this stack provisions service projects using a three-tier config model:
+
+1. **Org-common** (`Pulumi-common.yaml`) — shared values across all initiatives (organisation ID, billing account, seed project ID, default location)
+2. **Initiative-common** (`Pulumi.<initiative>-common.yaml`) — per-initiative defaults (project name base, APIs, binding configs, labels)
+3. **Environment** (`Pulumi.<initiative>-<env>.yaml` / stack config) — per-environment overrides and principals
+
+Stack name must follow `<initiative>-<environment>` format (e.g. `myapp-dev`). Environment-level config takes priority over initiative-common for overridable parameters (`bindingsPowerUserConfig`, `bindingsROUserConfig`, `stateBucket`).
+
+Uses the `service-project`, `labels` modules. See `Pulumi-common.sample.yaml`, `Pulumi.myapp-common.sample.yaml`, and `Pulumi.myapp-dev.sample.yaml` for config templates.
 
 ### Modules
 
@@ -100,9 +116,10 @@ Reusable Pulumi `ComponentResource` modules consumed by stacks via relative impo
 | Module | Path | Purpose |
 |--------|------|---------|
 | Folder | `modules/folder/` | Creates GCP resource folders under an organisation or parent folder, with optional IAM bindings |
-| IAM | `modules/iam/` | Non-authoritative IAM member bindings for organisation, folder, project, or resource targets |
+| IAM | `modules/iam/` | Non-authoritative IAM member bindings for organisation, folder, project, or resource targets. Supports conditional bindings via CEL expressions |
 | Labels | `modules/labels/` | Sanitises user-provided labels into GCP-compliant format |
 | Project | `modules/project/` | Creates a GCP project with APIs, default SA cleanup, optional IAM bindings and labels |
+| Service Project | `modules/service-project/` | Creates a GCP project in an environment folder with power-user/read-only IAM bindings, optional CICD service account, and optional Pulumi state bucket |
 | Storage | `modules/storage/` | Creates a GCS bucket with optional postfix, multi-region support, IAM bindings and labels |
 
 ## Getting Started

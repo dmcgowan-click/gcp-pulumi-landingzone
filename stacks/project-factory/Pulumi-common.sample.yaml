@@ -1,0 +1,6 @@
+organisation: "<organisation numeric ID>"
+billing: "<billing account id (format: XXXXXX-XXXXXX-XXXXXX)>"
+seedProjectID: "<seed project ID>"
+defaultLocation: "<valid gcp region (e.g. australia-southeast1)>"
+labels: # (optional) - GCP project labels (keys/values: lowercase, digits, underscores, hyphens only; max 63 chars)
+  <key>: <value>
