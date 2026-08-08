@@ -155,23 +155,29 @@ Previous steps will have created a GCP Storage Bucket for storage of the Pulumi 
 All stacks will have one of the following sample configuration files
 
 * `Pulumi.org.sample.yaml` for org wide deployments
-* `Pulumi.ENV.sample.yaml` for deployments that will span across multiple environments
+* `Pulumi.ENV.sample.yaml` for deployments that will span across multiple environments (example, project factory)
 
 Rename the files to the following accordingly
 
 * `Pulumi.org.yaml`
 * `Pulumi.dev.yaml` #dev is an example
-* `Pulumi.dev.yaml` #prd is an example
+* `Pulumi.prod.yaml` #prod is an example
 
 And populate the values accordingly. Overwhelmed?! Start small and expand as needed
 
 All stacks can be run as follows after the bootstrap step
 
+**Org Only stacks (e.g, organisation, identity)**
 ```bash
 make up-infra STACK_DIR=stacks/<stack folder name>
 ```
 
-All stacks will also contain the following configuration file
+**Per Environment Stacks (e.g, project-factory)**
+```bash
+make up-infra STACK_DIR=stacks/<stack folder name> STACK_ENV=<where yaml is Pulumi.dev.yaml, env is 'dev'>
+```
+
+All stacks will contain the following configuration file, the same as the organisation stack used in the bootstrap step
 
 * `state.sample.yaml`
 

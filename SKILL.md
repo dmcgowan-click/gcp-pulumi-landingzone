@@ -22,9 +22,16 @@ None yet defined
 
 Search for an `stc` folder within the repo. If a folder is not found, prompt the user to provide a path to the `stc` folder.
 
-Once located, search for `DRAFT.md` or `DETAIL.md` within the `stc` folder. These are the STC definition files.
+Once located, read global context:
+* Always read `stc/GLOBAL.md` — contains language, Pulumi requirements, and conventions referenced by all definitions.
 
-> **NOTE:** The file structure is evolving — currently there may be one or both of these files. Read all that exist and combine their content to form the full STC catalogue.
+Then read the specific STC definition:
+* **Split structure** (preferred): If `stc/stacks/` and `stc/modules/` directories exist, read only the targeted definition file:
+  * Stack → `stc/stacks/<name>.md` (e.g., `### Organisation` → `stc/stacks/organisation.md`)
+  * Module → `stc/modules/<name>.md` (e.g., `### IAM` → `stc/modules/iam.md`)
+* **Monolithic fallback**: If split files do not exist, search for `DRAFT.md` or `DETAIL.md` in the `stc` folder. Read all that exist and combine their content to form the full STC catalogue.
+
+For the **alignment** action, read all files under `stc/stacks/` or `stc/modules/` (based on type) rather than a single definition.
 
 ### 2. Confirm STC type, name and action
 
