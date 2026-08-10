@@ -2,6 +2,7 @@ config:
   gcp:region: australia-southeast1
   organisation:organisation: "<organisation numeric ID>"
   organisation:billing: "<billing account id (format: XXXXXX-XXXXXX-XXXXXX)>"
+  organisation:domain: "<google cloud domain>"
   organisation:environments:
     - name: <environment name a>
       bindings: # (optional) - IAM bindings applied to this environment's folder

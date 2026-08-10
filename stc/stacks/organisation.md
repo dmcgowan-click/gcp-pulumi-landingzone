@@ -7,6 +7,7 @@ Create a Pulumi stack under `stacks/organisation` to create org level components
 ```yaml
 organisation: <organisation numeric ID>
 billing: <billing account id (format: XXXXXX-XXXXXX-XXXXXX)>
+domain: <google cloud domain>
 environments:
   - name: <environment name a>
     bindings: # (optional) - IAM bindings applied to this environment's folder
@@ -43,15 +44,20 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
     * Create under organisation
       * common
         * Name hardcoded to `common`
-        * No IAM bindings applied (asymmetric by design — `common` never accepts bindings)
+        * Apply domain-wide IAM binding only (asymmetric by design — `common` never accepts user-supplied bindings)
+          * Input `{ roles/resourcemanager.folderViewer: [ domain:<domain> ]}`
       * environments
         * Parsed type: `Array<{ name: string; bindings?: { [roleId: string]: string[] } }>`
         * One folder per entry under `environments`
         * At least one environment entry must be declared. Error if `environments` is empty or missing.
         * Each entry `name` must be non-empty and unique across the list. Folder display-name length (3–30) deferred to the `folder` module.
         * Folder display name = `name`; Pulumi resource name = `env-<name>`
-        * bindings (optional)
-          * If provided, pass the entry's `bindings` to the `folder` module for that environment's folder (target = created folder numeric ID)
+        * Apply IAM bindings for domain and (if provided) user-supplied principals
+          * Input `{ roles/resourcemanager.folderViewer: [ domain:<domain> ]}`
+          * If provided, merge user `bindings` into the domain binding map:
+            * For shared role keys, concatenate principal arrays (domain principals + user principals)
+            * For new role keys, add as-is
+          * Pass merged result to `bindings` in the `folder` module
   * Create seed project
     * Use `project` module
     * Create under `common` folder
@@ -124,6 +130,10 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
           * `policyName` = map key
           * `spec` = entry `spec` (if provided) — uses `gcp.orgpolicy.PolicySpec` type, passed through
           * `dryRunSpec` = entry `dryRunSpec` (if provided) — uses `gcp.orgpolicy.PolicyDryRunSpec` type, passed through
+  * Create bindings for domain wide Google Identity
+    * Use `iam` module
+      * Assign binding to the organisation
+      * Input `{ roles/resourcemanager.organizationViewer: [ domain:<domain> ]}`
   * Create bindings for Org Admin Google Identity group
     * Validate that `bindingsOrgAdmin.group` starts with `group:` prefix at construction time. Error if not. Only `group:` principals are accepted for this input.
     * If `bindingsOrgAdmin.sa` is provided
@@ -154,14 +164,13 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
     * Use module defaults for `uniformAccess` (`true`) and `versioning` (`true`)
     * Labels = same merged labels as seed project (sanitised user labels → `{ stack: "organisation" }` → module defaults)
 * Return
-  * Organisation
-  * Folders
-    * <key = name> = <value = numeric id (gcp assigned)>
-    * Bindings (as null if NA)
-  * BindingsOrgAdmin
-  * ServiceAccountEmail (if SA enabled, null if not)
-  * ProjectSeedName
-  * ProjectSeedID
-  * ProjectSeedNumericIdentifier (GCP-assigned number)
-  * StorageBucketName (final bucket name with postfix)
-  * OrgPolicies (list of policy names applied, null if none)
+  * organisation — `pulumi.Output<string>` — the organisation ID as provided
+  * folders — `pulumi.Output<{ [name: string]: string }>` — map of folder display name to GCP-assigned numeric ID
+  * foldersBindings — `pulumi.Output<{ [name: string]: { [roleId: string]: string[] } | null }>` — per-folder bindings, null if not provided
+  * bindingsOrgAdmin — `pulumi.Output<{ [roleId: string]: string[] }>` — resolved org admin role-to-principal mapping
+  * serviceAccountEmail — `pulumi.Output<string> | null` — SA email if enabled, null if not
+  * projectSeedName — `pulumi.Output<string>` — seed project display name
+  * projectSeedId — `pulumi.Output<string>` — seed project ID (name + postfix)
+  * projectSeedNumber — `pulumi.Output<string>` — GCP-assigned numeric project identifier
+  * storageBucketName — `pulumi.Output<string>` — final bucket name including postfix
+  * orgPolicies — `pulumi.Output<string[]> | null` — list of policy constraint names applied, null if none

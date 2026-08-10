@@ -141,10 +141,10 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
       * The merged result (still a plain object at this point — `apply()` the Labels output then spread with hardcoded labels) is passed to modules
     * Project module `labels` arg must accept `pulumi.Input<{ [key: string]: string }>` to support receiving Outputs
 * Return
-  * projectDisplayName — the project display name
-  * projectId — the `<name>-<environment>-<postfix>` string
-  * projectNumber — GCP-assigned numeric project identifier
-  * environment — the environment name
-  * powerUserServiceAccountEmail (if SA enabled, null if not)
-  * stateBucketName (final bucket name, null if stateBucket is false)
-  * labels — final merged map including module defaults
+  * projectDisplayName — `pulumi.Output<string>` — the project display name
+  * projectId — `pulumi.Output<string>` — the `<name>-<environment>-<postfix>` string
+  * projectNumber — `pulumi.Output<string>` — GCP-assigned numeric project identifier
+  * environment — `pulumi.Output<string>` — the environment name
+  * powerUserServiceAccountEmail — `pulumi.Output<string> | null` — SA email if enabled, null if not
+  * stateBucketName — `pulumi.Output<string> | null` — final bucket name, null if stateBucket is false
+  * labels — `pulumi.Output<{ [key: string]: string }>` — final merged map including module defaults

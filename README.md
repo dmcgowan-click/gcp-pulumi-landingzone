@@ -81,7 +81,8 @@ The `stc/` directory contains specification documents that define how stacks and
 
 The foundational Pulumi stack for GCP organisation-level resources. Located in `stacks/organisation/`, it provisions:
 
-- **Folders** — a `common` folder and one folder per environment (e.g. `dev`, `prod`)
+- **Folders** — a `common` folder and one folder per environment (e.g. `dev`, `prod`), each with domain-wide `folderViewer` bindings. Environment folders can also receive user-supplied IAM bindings (merged with the domain binding)
+- **Domain-wide IAM** — assigns `organizationViewer` to the Google Cloud domain at the organisation level
 - **Org Admin IAM bindings** — assigns organisation-level roles to a Google Identity group, with optional service account creation for CI/CD
 - **Seed Project** — a shared project under the `common` folder with essential APIs enabled
 - **Pulumi State Bucket** — a GCS bucket for Pulumi state storage (with hex postfix for uniqueness)
@@ -108,6 +109,15 @@ Located in `stacks/project-factory/`, this stack provisions service projects usi
 Stack name must follow `<initiative>-<environment>` format (e.g. `myapp-dev`). Environment-level config takes priority over initiative-common for overridable parameters (`bindingsPowerUserConfig`, `bindingsROUserConfig`, `stateBucket`).
 
 Uses the `service-project`, `labels` modules. See `Pulumi-common.sample.yaml`, `Pulumi.myapp-common.sample.yaml`, and `Pulumi.myapp-dev.sample.yaml` for config templates.
+
+### CICD Stack
+
+Located in `stacks/cicd/`, this stack provisions CI/CD infrastructure. It creates:
+
+- **CICD Project** — a dedicated GCP project under the `common` folder with Artifact Registry and related APIs enabled
+- **Artifact Registries** — configurable repositories supporting Docker, npm, and Python formats with cleanup policies (30-day TTL, untagged image cleanup for Docker), optional multi-region placement, and immutable tag policies (Docker only)
+
+Auto-discovers the `common` folder if no folder ID is provided. Uses the shared `project` and `labels` modules. See `stacks/cicd/Pulumi.org.sample.yaml` for config template.
 
 ### Modules
 
@@ -197,3 +207,52 @@ The Identity stack requires some additional configuration as it technically uses
    * `https://www.googleapis.com/auth/admin.directory.user`
    * `https://www.googleapis.com/auth/admin.directory.group`
    * `https://www.googleapis.com/auth/admin.directory.group.member`
+
+#### Extra Instructions for the Project Factory stack
+
+Project factory works a bit differently to other stacks, due to the overhead required to provision a full service project. 
+
+In the project factory stack, **each project** is its own deployment, regardless of which environment it belongs to. This reduces the overhead of interacting with all projects when potentially a change only applies to a single or handful of projects. This also allows configuration of CICD to target multiple projects in parallel based on file updates, improving deployment times and reducing impact of misconfigurations
+
+Project Factory uses a **three-tier config model**:
+
+| Tier | File | Scope | Purpose |
+|------|------|-------|---------|
+| Org-common | `Pulumi-common.yaml` | All projects | Organisation ID, billing account, seed project, default region |
+| Initiative-common | `Pulumi.<initiative>-common.yaml` | All environments for one initiative | Project name base, APIs, default IAM bindings, labels |
+| Environment | `Pulumi.<initiative>-<env>.yaml` | Single project deployment | Per-project principals, IAM overrides, labels |
+
+Settings defined at the environment level take priority over initiative-common for overridable parameters (IAM bindings, state bucket)
+
+**Setup steps:**
+
+1. Copy and populate the org-common config (one per landing zone):
+```bash
+cp stacks/project-factory/Pulumi-common.sample.yaml stacks/project-factory/Pulumi-common.yaml
+```
+
+2. Copy and populate the initiative-common config (one per initiative/app):
+```bash
+cp stacks/project-factory/Pulumi.myapp-common.sample.yaml stacks/project-factory/Pulumi.<your-initiative>-common.yaml
+```
+
+3. Copy and populate the environment config (one per project deployment):
+```bash
+cp stacks/project-factory/Pulumi.myapp-dev.sample.yaml stacks/project-factory/Pulumi.<your-initiative>-<env>.yaml
+```
+
+And populate the values accordingly. Overwhelmed?! As before, start small and expand as needed. And use your agents to help!
+
+**Deploying a project:**
+
+The stack name must match the `<initiative>-<environment>` pattern from the filename. For example, to deploy the project defined in `Pulumi.myapp-dev.yaml`:
+
+```bash
+make up-infra STACK_DIR=stacks/project-factory STACK_ENV=myapp-dev
+```
+
+To deploy the same initiative to production (`Pulumi.myapp-prod.yaml`):
+
+```bash
+make up-infra STACK_DIR=stacks/project-factory STACK_ENV=myapp-prod
+```

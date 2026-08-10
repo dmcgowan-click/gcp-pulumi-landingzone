@@ -16,11 +16,11 @@ Create a Pulumi stack under `stacks/identity` to create users and groups
 * Accept an input based on the following YAML definition
 
 ```yaml
-identity:domain: <domain name for google identity>
-identity:customerId: <Google Workspace customer ID (starts with C)>
-identity:impersonateAdmin: <admin email for domain-wide delegation>
-identity:serviceAccountEmail: <service account email from organisation stack>
-identity:principals:
+domain: <domain name for google identity>
+customerId: <Google Workspace customer ID (starts with C)>
+impersonateAdmin: <admin email for domain-wide delegation>
+serviceAccountEmail: <service account email from organisation stack>
+principals:
   groups:
     - name: <name>
       description: <description of group (optional)>
@@ -123,5 +123,5 @@ identity:principals:
       * Add explicit `dependsOn` on the corresponding user resource (if created in this stack) to ensure ordering
       * Rely on API error if the user does not exist
 * Return
-  * users — map of `<emailPrimaryId>: <full primary email>` for all created users
-  * groups — map of `<group name>: <group email>` for all created groups
+  * users — `pulumi.Output<{ [emailPrimaryId: string]: string }>` — map of email ID to full primary email
+  * groups — `pulumi.Output<{ [name: string]: string }>` — map of group name to group email

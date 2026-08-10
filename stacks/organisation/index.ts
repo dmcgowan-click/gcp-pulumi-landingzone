@@ -13,6 +13,7 @@ const gcpConfig = new pulumi.Config("gcp");
 
 const organisation = config.require("organisation");
 const billing = config.require("billing");
+const domain = config.require("domain");
 const environments = config.requireObject<Array<{
     name: string;
     bindings?: { [roleId: string]: string[] };
@@ -153,13 +154,17 @@ function createOrgPolicies(
 
 /**
  * Creates the common folder and one folder per environment under the organisation.
+ * Applies domain-wide folderViewer binding to all folders. Environment folders also
+ * receive user-supplied bindings (merged with the domain binding).
  *
  * @param orgId The organisation numeric ID
+ * @param domainName The Google Cloud domain for domain-wide IAM bindings
  * @param envs List of environment entries (name and optional folder IAM bindings)
  * @returns Map of folder name to Folder component
  */
 function createFolders(
     orgId: string,
+    domainName: string,
     envs: Array<{ name: string; bindings?: { [roleId: string]: string[] } }>,
 ): { [name: string]: Folder } {
     if (!envs || envs.length === 0) {
@@ -177,18 +182,34 @@ function createFolders(
         seen.add(env.name);
     }
 
+    const domainBinding: { [roleId: string]: pulumi.Input<string>[] } = {
+        "roles/resourcemanager.folderViewer": [`domain:${domainName}`],
+    };
+
     const folders: { [name: string]: Folder } = {};
 
     folders["common"] = new Folder("common", {
         organisation: orgId,
         name: "common",
+        bindings: domainBinding,
     });
 
     for (const env of envs) {
+        let mergedBindings: { [roleId: string]: pulumi.Input<string>[] } = { ...domainBinding };
+        if (env.bindings) {
+            for (const [role, principals] of Object.entries(env.bindings)) {
+                if (mergedBindings[role]) {
+                    mergedBindings[role] = [...(mergedBindings[role] as string[]), ...principals];
+                } else {
+                    mergedBindings[role] = principals;
+                }
+            }
+        }
+
         folders[env.name] = new Folder(`env-${env.name}`, {
             organisation: orgId,
             name: env.name,
-            bindings: env.bindings,
+            bindings: mergedBindings,
         });
     }
 
@@ -228,6 +249,22 @@ function createSeedProject(
 }
 
 /**
+ * Creates a domain-wide IAM binding at the organisation level.
+ *
+ * @param orgId The organisation numeric ID
+ * @param domainName The Google Cloud domain
+ * @returns The Iam component
+ */
+function createOrgDomainBinding(orgId: string, domainName: string): Iam {
+    return new Iam("iam-org-viewer", {
+        organisation: orgId,
+        bindings: {
+            "roles/resourcemanager.organizationViewer": [`domain:${domainName}`],
+        },
+    });
+}
+
+/**
  * Creates IAM bindings for the org admin group (and optional service account) at the organisation level.
  *
  * @param orgId The organisation numeric ID
@@ -255,7 +292,7 @@ function createOrgAdminBindings(
         }
     }
 
-    return new Iam("org-admin-bindings", {
+    return new Iam("iam-org-admin", {
         organisation: orgId,
         bindings: bindings,
     });
@@ -302,7 +339,7 @@ function createStateBucket(
     });
 }
 
-const folders = createFolders(organisation, environments);
+const folders = createFolders(organisation, domain, environments);
 
 const labelsModule = new Labels("org-labels", { labels: userLabels });
 const mergedLabels = labelsModule.labels.apply((sanitised): { [key: string]: string } => ({
@@ -331,6 +368,8 @@ const orgPolicies = createOrgPolicies(
     },
 );
 
+createOrgDomainBinding(organisation, domain);
+
 const saEnabled = bindingsOrgAdmin.sa?.enabled === true;
 const saName = bindingsOrgAdmin.sa?.name || "cicd-org";
 
@@ -352,19 +391,18 @@ const stateBucket = createStateBucket(seedProject.projectId, region, mergedLabel
 export const organisationOutput = organisation;
 export const foldersOutput = pulumi.output(
     Object.fromEntries(
-        Object.entries(folders).map(([name, folder]) => [
-            name,
-            {
-                id: folder.folderId,
-                bindings: folder.bindings,
-            },
-        ])
+        Object.entries(folders).map(([name, folder]) => [name, folder.folderId])
+    )
+);
+export const foldersBindingsOutput = pulumi.output(
+    Object.fromEntries(
+        Object.entries(folders).map(([name, folder]) => [name, folder.bindings])
     )
 );
 export const bindingsOrgAdminOutput = orgAdminIam.bindings;
 export const serviceAccountEmailOutput = serviceAccountEmail ?? pulumi.output(null);
 export const projectSeedName = seedProject.projectDisplayName;
 export const projectSeedId = seedProject.projectId;
-export const projectSeedNumericIdentifier = seedProject.projectNumber;
+export const projectSeedNumber = seedProject.projectNumber;
 export const storageBucketName = stateBucket.bucketName;
 export const orgPoliciesOutput = orgPolicies.length > 0 ? orgPolicies : null;

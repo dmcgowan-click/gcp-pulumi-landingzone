@@ -1,0 +1,12 @@
+{
+  "name": "cicd",
+  "main": "index.ts",
+  "devDependencies": {
+    "@types/node": "^20"
+  },
+  "dependencies": {
+    "@pulumi/gcp": "^8",
+    "@pulumi/pulumi": "^3",
+    "@pulumi/random": "^4"
+  }
+}

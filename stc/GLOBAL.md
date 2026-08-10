@@ -53,6 +53,8 @@ Reusable rules referenced throughout by tag. Apply wherever referenced.
   * Module Resolution
     * Modules use relative imports for `@pulumi/*` packages — these resolve via Node's `node_modules` directory walking
     * The `Makefile` `prepare-infra` target must symlink the stack's `node_modules` into the `modules/` directory so that modules can resolve their dependencies: `ln -sfn <stack_node_modules> <modules_dir>/node_modules`
+* Resource Options
+  * Do NOT use `parent` or `dependsOn` referencing a ComponentResource instance from outside that component's constructor. The implicit dependency via Output properties (e.g. `project: myProject.projectId`) is sufficient and avoids Pulumi runtime crashes with "promises still active" errors.
 * Where a YAML definition is provided, add it to the `Pulumi.<env>.yaml` file/s alongside any default required values
   * Config values will fall under a config namespace matching the stack name (e.g. `organisation:organisation`, `organisation:environments`)
   * Where existing key / values have been populated, leave values as they are
