@@ -50,8 +50,13 @@ conditions: # (optional)
       * `description` is optional
       * `expression` must be provided (CEL expression). [CONV-VALIDATE-API]
       * `members` must be provided as a non-empty list. Each member must match a principal assigned to the corresponding role in `bindings`
+  * Conditional Binding Deduplication
+    * When a principal appears in a `conditions` entry for a given role, the unconditional binding for that role+principal pair must be skipped — only the conditional binding is created, not both
+    * Build a per-role `Map<string, Set<pulumi.Input<string>>>` from `conditions` entries. Before creating each unconditional binding, check `Set.has(principal)` to decide whether to skip
+    * `Set.has()` uses reference equality (`SameValueZero`), which matches both plain strings by value and `pulumi.Output` objects by object reference. Callers must pass the **same object reference** for a principal in both `bindings` and `conditions.members` for Output deduplication to work
   * Resource Naming
-    * Child Pulumi resource names must follow `<component-name>-<roleId>-<principal>` with `/` and `:` replaced by `-`
+    * Unconditional bindings: `<component-name>-<roleId>-<principal>` with `/` and `:` replaced by `-`
+    * Conditional bindings: `<component-name>-<roleId>-<conditionTitle>-<principal>` with `/` and `:` replaced by `-`
     * When a principal is a `pulumi.Output<string>` (not a plain string), use `member-<index>` in place of the principal value for the resource name (e.g. `<component-name>-<roleId>-member-0`). This ensures deterministic naming without requiring `.apply()` to resolve the value.
 * Return
   * organisation (as null if NA)

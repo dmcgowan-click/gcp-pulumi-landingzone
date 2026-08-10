@@ -3,6 +3,7 @@ config:
   cicd:organisation: "<organisation numeric ID>"
   # cicd:folder: "<common folder numeric ID>" # (optional - if not provided, looks up folder by name "common" under the organisation)
   cicd:billing: "<billing account id (format: XXXXXX-XXXXXX-XXXXXX)>"
+  cicd:seedProjectID: "<project ID of the seed project from the organisation stack>"
   cicd:defaultLocation: "<valid gcp region for regional resources (e.g. australia-southeast1)>"
   # cicd:apisAdditional: # (optional)
   #   - <additional api>
@@ -12,7 +13,7 @@ config:
       mode: standard
       # multiRegion: <valid multi region> # (optional)
       # immutable: <enabled | disabled> # (optional - docker only, default disabled)
-      # cleanupPolicies: <delete | dryrun> # (optional, default dryrun)
+      # cleanupPolicies: <delete | keep> # (optional, default delete)
       # labels: # (optional)
       #   <key>: <value>
   # cicd:labels: # (optional)

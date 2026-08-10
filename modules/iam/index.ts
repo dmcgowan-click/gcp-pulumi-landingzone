@@ -65,14 +65,17 @@ export class Iam extends pulumi.ComponentResource {
 
         this.validateArgs(args);
 
-        // Build a set of conditional member keys for lookup: "role|principal"
-        const conditionalMembers = new Set<string>();
+        // Build a map of conditional members per role for lookup.
+        // Uses reference equality so both plain strings and Pulumi Outputs are matched.
+        const conditionalMembersByRole = new Map<string, Set<pulumi.Input<string>>>();
         if (args.conditions) {
             for (const condition of args.conditions) {
+                if (!conditionalMembersByRole.has(condition.role)) {
+                    conditionalMembersByRole.set(condition.role, new Set());
+                }
+                const roleSet = conditionalMembersByRole.get(condition.role)!;
                 for (const member of condition.members) {
-                    if (typeof member === "string") {
-                        conditionalMembers.add(`${condition.role}|${member}`);
-                    }
+                    roleSet.add(member);
                 }
             }
         }
@@ -84,7 +87,8 @@ export class Iam extends pulumi.ComponentResource {
                 const isPlainString = typeof principal === "string";
 
                 // Skip principals that have a condition defined for this role
-                if (isPlainString && conditionalMembers.has(`${roleId}|${principal}`)) {
+                const roleCondMembers = conditionalMembersByRole.get(roleId);
+                if (roleCondMembers && roleCondMembers.has(principal)) {
                     continue;
                 }
 

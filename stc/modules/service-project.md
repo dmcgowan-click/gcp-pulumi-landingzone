@@ -85,7 +85,7 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
           * Omit SA principal if `sa.enabled` is `false` or `sa` is not provided
         * `conditions`: break `bindingProjectIAM` role list into blocks of 10 (0-indexed). For each block:
           * `role`: `'roles/resourcemanager.projectIamAdmin'`
-          * `title`: `condition_block_<blockId>` (e.g. `condition_block_0`, `condition_block_1`)
+          * `title`: `condition_block_<blockId>` (e.g. `condition_block_1`, `condition_block_2`)
           * `description`: `Condition Block <blockId>`
           * `expression`: `` `api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['${roles.join("', '")}'])` `` — CEL list literal of the roles in this block
           * `members`: `[<group>, <serviceAccount:sa-email>]` (same principals as bindings, omit SA if not enabled)

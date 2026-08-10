@@ -174,8 +174,8 @@ export class ServiceProject extends pulumi.ComponentResource {
                 const rolesList = blockRoles.map(r => `'${r}'`).join(", ");
                 conditions.push({
                     role: "roles/resourcemanager.projectIamAdmin",
-                    title: `condition_block_${blockId}`,
-                    description: `Condition Block ${blockId}`,
+                    title: `condition_block_${blockId + 1}`,
+                    description: `Condition Block ${blockId + 1}`,
                     expression: `api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly([${rolesList}])`,
                     members: [...powerUserPrincipals],
                 });
