@@ -19,6 +19,10 @@ bindings: # (optional)
   <role_id_b>:
     - <principal a>
     - <principal c>
+orgPolicyOverride: # (optional)
+  <policy constraint name>:
+    spec: <policy spec (optional, at least one of spec or dryRunSpec required)>
+    dryRunSpec: <dry run policy spec (optional, at least one of spec or dryRunSpec required)>
 labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
   <key>: <value>
 ```
@@ -56,6 +60,17 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
       * Inputs
         * project = created project ID
         * bindings = bindings
+  * `orgPolicyOverride` (optional)
+    * Iterate over map entries where the key is the policy constraint name and the value contains `spec` and/or `dryRunSpec`
+    * Validation is performed up-front in the Project module before delegating to the org-policy module: key (policy name) must be non-empty, at least one of `spec` or `dryRunSpec` must be provided
+    * For each entry:
+      * Pulumi resource name: `${name}-orgpolicy-${policyName}`
+      * Create policy via org-policy module with:
+        * `project` = Project ID (`pulumi.Output<string>` from the created project — org-policy module accepts `pulumi.Input<string>`)
+        * `policyName` = map key
+        * `spec` = entry `spec` (if provided) — uses `gcp.orgpolicy.PolicySpec` type, passed through
+        * `dryRunSpec` = entry `dryRunSpec` (if provided) — uses `gcp.orgpolicy.PolicyDryRunSpec` type, passed through
+
   * `labels` is optional
     * Apply [CONV-LABELS] with module defaults: `{ module: "project", deployed_by: "pulumi" }`
 * Return

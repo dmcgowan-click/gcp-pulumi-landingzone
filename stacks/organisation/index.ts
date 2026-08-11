@@ -29,6 +29,9 @@ const bindingsOrgAdmin = config.requireObject<{
 const apisAdditional = config.getObject<string[]>("apisAdditional") || [];
 const orgPolicyDisableIAMExternalOrg = config.getBoolean("orgPolicyDisableIAMExternalOrg") ?? true;
 const orgPolicyDisableServiceAccountKeyCreation = config.getBoolean("orgPolicyDisableServiceAccountKeyCreation") ?? true;
+const orgPolicyDisableServiceAccountKeyUpload = config.getBoolean("orgPolicyDisableServiceAccountKeyUpload") ?? true;
+const automaticIamGrantsForDefaultServiceAccounts = config.getBoolean("automaticIamGrantsForDefaultServiceAccounts") ?? true;
+const orgPolicySkipDefaultNetworkCreation = config.getBoolean("orgPolicySkipDefaultNetworkCreation") ?? true;
 const orgPolicyAdditional = config.getObject<{
     [policyName: string]: {
         spec?: inputs.orgpolicy.PolicySpec;
@@ -44,6 +47,9 @@ const region = gcpConfig.require("region");
  * @param orgId The organisation numeric ID
  * @param disableIAMExternalOrg Whether to create the default iam.managed.allowedPolicyMembers policy (restricts IAM members to the org)
  * @param disableServiceAccountKeyCreation Whether to create the default iam.managed.disableServiceAccountKeyCreation policy
+ * @param disableServiceAccountKeyUpload Whether to create the default iam.disableServiceAccountKeyUpload policy
+ * @param disableAutomaticIamGrants Whether to create the default iam.automaticIamGrantsForDefaultServiceAccounts policy
+ * @param skipDefaultNetworkCreation Whether to create the default compute.skipDefaultNetworkCreation policy
  * @param additional Map of additional org policies to create
  * @param opts Resource options applied to each policy (quota project provider and dependencies)
  * @returns List of policy names applied
@@ -52,12 +58,18 @@ function createOrgPolicies(
     orgId: string,
     disableIAMExternalOrg: boolean,
     disableServiceAccountKeyCreation: boolean,
+    disableServiceAccountKeyUpload: boolean,
+    disableAutomaticIamGrants: boolean,
+    skipDefaultNetworkCreation: boolean,
     additional: { [policyName: string]: { spec?: inputs.orgpolicy.PolicySpec; dryRunSpec?: inputs.orgpolicy.PolicyDryRunSpec } },
     opts: pulumi.ComponentResourceOptions,
 ): string[] {
     const appliedPolicies: string[] = [];
     const allowedMembersKey = "iam.managed.allowedPolicyMembers";
     const disableSaKeyKey = "iam.managed.disableServiceAccountKeyCreation";
+    const disableSaKeyUploadKey = "iam.disableServiceAccountKeyUpload";
+    const automaticIamGrantsKey = "iam.automaticIamGrantsForDefaultServiceAccounts";
+    const skipDefaultNetworkKey = "compute.skipDefaultNetworkCreation";
 
     // Validate all additional entries up front.
     for (const [policyName, entry] of Object.entries(additional)) {
@@ -135,8 +147,73 @@ function createOrgPolicies(
         appliedPolicies.push(disableSaKeyKey);
     }
 
+    // iam.disableServiceAccountKeyUpload — boolean constraint.
+    if (disableServiceAccountKeyUpload) {
+        const additionalEntry = additional[disableSaKeyUploadKey];
+        new OrgPolicy(`org-policy-${disableSaKeyUploadKey}`, {
+            organisation: orgId,
+            policyName: disableSaKeyUploadKey,
+            spec: additionalEntry?.spec ?? { rules: [{ enforce: "TRUE" }] },
+            dryRunSpec: additionalEntry?.dryRunSpec,
+        }, opts);
+        appliedPolicies.push(disableSaKeyUploadKey);
+    } else if (additional[disableSaKeyUploadKey]) {
+        const entry = additional[disableSaKeyUploadKey];
+        new OrgPolicy(`org-policy-${disableSaKeyUploadKey}`, {
+            organisation: orgId,
+            policyName: disableSaKeyUploadKey,
+            spec: entry.spec,
+            dryRunSpec: entry.dryRunSpec,
+        }, opts);
+        appliedPolicies.push(disableSaKeyUploadKey);
+    }
+
+    // iam.automaticIamGrantsForDefaultServiceAccounts — boolean constraint.
+    if (disableAutomaticIamGrants) {
+        const additionalEntry = additional[automaticIamGrantsKey];
+        new OrgPolicy(`org-policy-${automaticIamGrantsKey}`, {
+            organisation: orgId,
+            policyName: automaticIamGrantsKey,
+            spec: additionalEntry?.spec ?? { rules: [{ enforce: "TRUE" }] },
+            dryRunSpec: additionalEntry?.dryRunSpec,
+        }, opts);
+        appliedPolicies.push(automaticIamGrantsKey);
+    } else if (additional[automaticIamGrantsKey]) {
+        const entry = additional[automaticIamGrantsKey];
+        new OrgPolicy(`org-policy-${automaticIamGrantsKey}`, {
+            organisation: orgId,
+            policyName: automaticIamGrantsKey,
+            spec: entry.spec,
+            dryRunSpec: entry.dryRunSpec,
+        }, opts);
+        appliedPolicies.push(automaticIamGrantsKey);
+    }
+
+    // compute.skipDefaultNetworkCreation — boolean constraint.
+    if (skipDefaultNetworkCreation) {
+        const additionalEntry = additional[skipDefaultNetworkKey];
+        new OrgPolicy(`org-policy-${skipDefaultNetworkKey}`, {
+            organisation: orgId,
+            policyName: skipDefaultNetworkKey,
+            spec: additionalEntry?.spec ?? { rules: [{ enforce: "TRUE" }] },
+            dryRunSpec: additionalEntry?.dryRunSpec,
+        }, opts);
+        appliedPolicies.push(skipDefaultNetworkKey);
+    } else if (additional[skipDefaultNetworkKey]) {
+        const entry = additional[skipDefaultNetworkKey];
+        new OrgPolicy(`org-policy-${skipDefaultNetworkKey}`, {
+            organisation: orgId,
+            policyName: skipDefaultNetworkKey,
+            spec: entry.spec,
+            dryRunSpec: entry.dryRunSpec,
+        }, opts);
+        appliedPolicies.push(skipDefaultNetworkKey);
+    }
+
     for (const [policyName, entry] of Object.entries(additional)) {
-        if (policyName === allowedMembersKey || policyName === disableSaKeyKey) {
+        if (policyName === allowedMembersKey || policyName === disableSaKeyKey
+            || policyName === disableSaKeyUploadKey || policyName === automaticIamGrantsKey
+            || policyName === skipDefaultNetworkKey) {
             continue;
         }
 
@@ -361,6 +438,9 @@ const orgPolicies = createOrgPolicies(
     organisation,
     orgPolicyDisableIAMExternalOrg,
     orgPolicyDisableServiceAccountKeyCreation,
+    orgPolicyDisableServiceAccountKeyUpload,
+    automaticIamGrantsForDefaultServiceAccounts,
+    orgPolicySkipDefaultNetworkCreation,
     orgPolicyAdditional,
     {
         providers: [seedQuotaProvider],

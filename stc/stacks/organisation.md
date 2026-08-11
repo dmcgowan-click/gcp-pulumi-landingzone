@@ -30,6 +30,9 @@ apisAdditional: # (optional)
   - <additional apis>
 orgPolicyDisableIAMExternalOrg: <[true|false] defaults to true> # (optional)
 orgPolicyDisableServiceAccountKeyCreation: <[true|false] defaults to true> # (optional)
+orgPolicyDisableServiceAccountKeyUpload: <[true|false] defaults to true> # (optional)
+automaticIamGrantsForDefaultServiceAccounts: <[true|false] defaults to true> # (optional)
+orgPolicySkipDefaultNetworkCreation: <[true|false] defaults to true> # (optional)
 orgPolicyAdditional: # (optional)
   <policy constraint name>:
     spec: <policy spec (optional, at least one of spec or dryRunSpec required)>
@@ -114,6 +117,30 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
             ```
       * If `false`:
         * Do not create the `iam.managed.disableServiceAccountKeyCreation` policy
+    * `orgPolicyDisableServiceAccountKeyUpload` (optional, defaults to `true`)
+      * If `true` or not provided
+        * Create `iam.disableServiceAccountKeyUpload` policy via org-policy module with:
+          * `organisation` = config organisation ID
+          * `policyName` = `iam.disableServiceAccountKeyUpload`
+          * `spec`: `{ rules: [{ enforce: "TRUE" }] }`
+      * If `false`:
+        * Do not create the `iam.disableServiceAccountKeyUpload` policy
+    * `automaticIamGrantsForDefaultServiceAccounts` (optional, defaults to `true`)
+      * If `true` or not provided
+        * Create `iam.automaticIamGrantsForDefaultServiceAccounts` policy via org-policy module with:
+          * `organisation` = config organisation ID
+          * `policyName` = `iam.automaticIamGrantsForDefaultServiceAccounts`
+          * `spec`: `{ rules: [{ enforce: "TRUE" }] }`
+      * If `false`:
+        * Do not create the `iam.automaticIamGrantsForDefaultServiceAccounts` policy
+    * `orgPolicySkipDefaultNetworkCreation` (optional, defaults to `true`)
+      * If `true` or not provided
+        * Create `compute.skipDefaultNetworkCreation` policy via org-policy module with:
+          * `organisation` = config organisation ID
+          * `policyName` = `compute.skipDefaultNetworkCreation`
+          * `spec`: `{ rules: [{ enforce: "TRUE" }] }`
+      * If `false`:
+        * Do not create the `compute.skipDefaultNetworkCreation` policy
     * `orgPolicyAdditional` (optional)
       * Iterate over map entries where the key is the policy constraint name and the value contains `spec` and/or `dryRunSpec`
       * For each entry:
@@ -125,6 +152,8 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
           * This is a boolean constraint with no list to merge, so the additional entry overrides the flag-created default.
           * If `orgPolicyDisableServiceAccountKeyCreation` is `true` (or not provided): do not create a separate policy resource. Instead, create the single policy resource using the additional entry's `spec`/`dryRunSpec` in place of the default `{ rules: [{ enforce: "TRUE" }] }` spec.
           * If `orgPolicyDisableServiceAccountKeyCreation` is `false`: create the policy using only the additional entry's spec (no default enforcement applied).
+        * Where map key equals `iam.disableServiceAccountKeyUpload`, `iam.automaticIamGrantsForDefaultServiceAccounts`, or `compute.skipDefaultNetworkCreation`:
+          * Same behaviour as `iam.managed.disableServiceAccountKeyCreation` above — boolean constraint, additional entry overrides the flag-created default.
         * Otherwise, create policy via org-policy module with:
           * `organisation` = config organisation ID
           * `policyName` = map key

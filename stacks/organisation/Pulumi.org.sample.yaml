@@ -22,9 +22,74 @@ config:
     - <additional api>
   organisation:orgPolicyDisableIAMExternalOrg: true # (optional, defaults to true)
   organisation:orgPolicyDisableServiceAccountKeyCreation: true # (optional, defaults to true)
-  # organisation:orgPolicyAdditional: # (optional)
-  #   <policy constraint name>:
-  #     spec: <policy spec>
-  #     dryRunSpec: <dry run policy spec>
+  organisation:orgPolicyAdditional:
+    # --- Network & Data Exfiltration ---
+    compute.vmExternalIpAccess:
+      spec:
+        rules:
+          - denyAll: "TRUE"
+    compute.restrictVpcPeering:
+      spec:
+        rules:
+          - denyAll: "TRUE"
+    compute.skipDefaultNetworkCreation:
+      spec:
+        rules:
+          - enforce: "TRUE"
+    sql.restrictPublicIp:
+      spec:
+        rules:
+          - enforce: "TRUE"
+    compute.restrictLoadBalancerCreationForTypes:
+      spec:
+        rules:
+          - denyAll: "TRUE"
+    # --- Identity & Access ---
+    iam.disableServiceAccountKeyUpload:
+      spec:
+        rules:
+          - enforce: "TRUE"
+    iam.automaticIamGrantsForDefaultServiceAccounts:
+      spec:
+        rules:
+          - enforce: "TRUE"
+    # iam.disableWorkloadIdentityClusterCreation:
+    #   spec:
+    #     rules:
+    #       - enforce: "TRUE"
+    # --- Storage & Data Protection ---
+    storage.uniformBucketLevelAccess:
+      spec:
+        rules:
+          - enforce: "TRUE"
+    storage.publicAccessPrevention:
+      spec:
+        rules:
+          - enforce: "TRUE"
+    # --- Compute & Runtime ---
+    compute.requireOsLogin:
+      spec:
+        rules:
+          - enforce: "TRUE"
+    compute.disableSerialPortAccess:
+      spec:
+        rules:
+          - enforce: "TRUE"
+    compute.disableNestedVirtualization:
+      spec:
+        rules:
+          - enforce: "TRUE"
+    # compute.requireShieldedVm:
+    #   spec:
+    #     rules:
+    #       - enforce: "TRUE"
+    # --- Resource Location (recommended: uncomment and set to your regions) ---
+    # gcp.resourceLocations:
+    #   spec:
+    #     rules:
+    #       - values:
+    #           allowedValues:
+    #             - "<your-region-1>"
+    #             - "<your-region-2>"
   organisation:labels: # (optional) - GCP project labels (keys/values: lowercase, digits, underscores, hyphens only; max 63 chars)
     <key>: <value>

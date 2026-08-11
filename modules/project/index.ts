@@ -1,7 +1,9 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as gcp from "@pulumi/gcp";
 import * as random from "@pulumi/random";
+import * as inputs from "@pulumi/gcp/types/input";
 import { Iam } from "../iam";
+import { OrgPolicy } from "../org-policy";
 
 /**
  * Input arguments for the Project module.
@@ -13,6 +15,7 @@ import { Iam } from "../iam";
  * @param name The project name (used as display name and project ID base, 1-25 chars)
  * @param apis List of GCP APIs to enable (at least one required)
  * @param bindings Optional IAM bindings to apply to the created project
+ * @param orgPolicyOverride Optional org policy overrides to apply to the created project
  * @param labels Optional labels to apply to the project (merged with default module: project)
  */
 export interface ProjectArgs {
@@ -23,6 +26,12 @@ export interface ProjectArgs {
     apis: string[];
     bindings?: {
         [roleId: string]: pulumi.Input<string>[];
+    };
+    orgPolicyOverride?: {
+        [policyName: string]: {
+            spec?: inputs.orgpolicy.PolicySpec;
+            dryRunSpec?: inputs.orgpolicy.PolicyDryRunSpec;
+        };
     };
     labels?: pulumi.Input<{ [key: string]: string }>;
 }
@@ -117,6 +126,17 @@ export class Project extends pulumi.ComponentResource {
             }, { parent: this });
         }
 
+        if (args.orgPolicyOverride) {
+            for (const [policyName, entry] of Object.entries(args.orgPolicyOverride)) {
+                new OrgPolicy(`${name}-orgpolicy-${policyName}`, {
+                    project: project.projectId,
+                    policyName: policyName,
+                    spec: entry.spec,
+                    dryRunSpec: entry.dryRunSpec,
+                }, { parent: this });
+            }
+        }
+
         this.projectDisplayName = pulumi.output(args.name);
         this.projectId = project.projectId;
         this.projectNumber = project.number;
@@ -180,6 +200,17 @@ export class Project extends pulumi.ComponentResource {
 
         if (!args.apis || args.apis.length === 0) {
             throw new Error("'apis' must contain at least one entry.");
+        }
+
+        if (args.orgPolicyOverride) {
+            for (const [policyName, entry] of Object.entries(args.orgPolicyOverride)) {
+                if (!policyName || policyName.trim() === "") {
+                    throw new Error("orgPolicyOverride key (policy name) must be non-empty.");
+                }
+                if (!entry.spec && !entry.dryRunSpec) {
+                    throw new Error(`orgPolicyOverride entry '${policyName}' must have at least one of 'spec' or 'dryRunSpec'.`);
+                }
+            }
         }
 
     }
