@@ -3,7 +3,7 @@ import * as path from "path";
 import * as pulumi from "@pulumi/pulumi";
 import * as yaml from "js-yaml";
 import { Labels } from "../../modules/labels";
-import { ServiceProject, ServiceProjectPowerUser, ServiceProjectROUser } from "../../modules/service-project";
+import { ServiceProject, ServiceProjectPowerUser, ServiceProjectROUser, ServiceProjectZones } from "../../modules/service-project";
 
 // --- Config Resolution ---
 
@@ -64,6 +64,16 @@ type BindingsPowerUserConfigType = {
 type BindingsROUserConfigType = {
     bindings: string[];
 };
+type DefaultProjectZoneType = {
+    rootZoneName: string;
+};
+type AdditionalProjectZonesType = {
+    [dnsName: string]: {
+        visibility?: string;
+        zoneName?: string;
+        description?: string;
+    };
+};
 
 const envBindingsPowerUserConfig = config.getObject<BindingsPowerUserConfigType>("bindingsPowerUserConfig");
 const initBindingsPowerUserConfig = initiativeCommon.bindingsPowerUserConfig as BindingsPowerUserConfigType | undefined;
@@ -97,6 +107,20 @@ if (envStateBucket !== undefined && initStateBucket !== undefined) {
 } else {
     stateBucket = envStateBucket ?? initStateBucket ?? true;
 }
+
+const envDefaultProjectZone = config.getObject<DefaultProjectZoneType>("defaultProjectZone");
+const initDefaultProjectZone = initiativeCommon.defaultProjectZone as DefaultProjectZoneType | undefined;
+
+let defaultProjectZone: DefaultProjectZoneType | undefined;
+if (envDefaultProjectZone && initDefaultProjectZone) {
+    pulumi.log.warn("'defaultProjectZone' defined in both env-level and initiative-common. Using env-level.");
+    defaultProjectZone = envDefaultProjectZone;
+} else {
+    defaultProjectZone = envDefaultProjectZone || initDefaultProjectZone;
+}
+
+// additionalProjectZones is env-level only
+const additionalProjectZones = config.getObject<AdditionalProjectZonesType>("additionalProjectZones");
 
 // Env-level parameters (always from stack config)
 const bindingsPowerUserPrincipal = config.get("bindingsPowerUserPrincipal");
@@ -166,6 +190,15 @@ if (bindingsROUserConfig && bindingsROUserPrincipal) {
     };
 }
 
+// Build project zones object for the service-project module
+let projectZones: ServiceProjectZones | undefined;
+if (defaultProjectZone || additionalProjectZones) {
+    projectZones = {
+        publicDefault: defaultProjectZone,
+        additional: additionalProjectZones,
+    };
+}
+
 const serviceProject = new ServiceProject(`${initiative}-${environment}`, {
     organisation: organisation,
     billing: billing,
@@ -177,6 +210,7 @@ const serviceProject = new ServiceProject(`${initiative}-${environment}`, {
     bindingsPowerUser: bindingsPowerUser,
     bindingsROUser: bindingsROUser,
     stateBucket: stateBucket,
+    projectZones: projectZones,
     labels: finalLabels,
 });
 

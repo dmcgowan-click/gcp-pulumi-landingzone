@@ -3,6 +3,7 @@ import * as gcp from "@pulumi/gcp";
 import { Project } from "../project";
 import { Iam, IamCondition } from "../iam";
 import { Storage } from "../storage";
+import { DnsZone } from "../dns-zone";
 
 /**
  * Power-user binding configuration for a Service Project.
@@ -34,6 +35,25 @@ export interface ServiceProjectROUser {
 }
 
 /**
+ * DNS zone configuration for project zones.
+ *
+ * @param publicDefault Optional public default zone delegated from the root zone
+ * @param additional Optional map of additional zones keyed by dnsName
+ */
+export interface ServiceProjectZones {
+    publicDefault?: {
+        rootZoneName: string;
+    };
+    additional?: {
+        [dnsName: string]: {
+            visibility?: string;
+            zoneName?: string;
+            description?: string;
+        };
+    };
+}
+
+/**
  * Input arguments for the Service Project module.
  *
  * @param organisation The organisation numeric ID, used only to scope the environment-folder lookup (not the project parent)
@@ -46,6 +66,7 @@ export interface ServiceProjectROUser {
  * @param bindingsPowerUser Optional power-user bindings applied to the project
  * @param bindingsROUser Optional read-only-user bindings applied to the project
  * @param stateBucket Whether to create a Pulumi state bucket under the seed project (defaults to true)
+ * @param projectZones Optional DNS zones to create for this project
  * @param labels Optional labels to apply to the project
  */
 export interface ServiceProjectArgs {
@@ -59,6 +80,7 @@ export interface ServiceProjectArgs {
     bindingsPowerUser?: ServiceProjectPowerUser;
     bindingsROUser?: ServiceProjectROUser;
     stateBucket?: boolean;
+    projectZones?: ServiceProjectZones;
     labels?: pulumi.Input<{ [key: string]: string }>;
 }
 
@@ -66,7 +88,8 @@ export interface ServiceProjectArgs {
  * A Pulumi ComponentResource that creates a GCP service project within an
  * environment folder. It composes the Project module (as an internal child)
  * and adds power-user / read-only-user IAM bindings, an optional CICD service
- * account, and an optional Pulumi state bucket hosted in the seed project.
+ * account, an optional Pulumi state bucket hosted in the seed project, and
+ * optional DNS zones.
  *
  * @param name The unique name of the component resource
  * @param args The service project creation arguments
@@ -82,6 +105,7 @@ export class ServiceProject extends pulumi.ComponentResource {
     public readonly bindingsROUser: pulumi.Output<ServiceProjectROUser | null>;
     public readonly powerUserServiceAccountEmail: pulumi.Output<string | null>;
     public readonly stateBucketName: pulumi.Output<string | null>;
+    public readonly zones: pulumi.Output<{ zoneName: string; dnsName: string }[] | null>;
     public readonly labels: pulumi.Output<{ [key: string]: string }>;
 
     constructor(name: string, args: ServiceProjectArgs, opts?: pulumi.ComponentResourceOptions) {
@@ -111,6 +135,9 @@ export class ServiceProject extends pulumi.ComponentResource {
             "iam.googleapis.com",
             "orgpolicy.googleapis.com",
         ];
+        if (args.projectZones) {
+            requiredApis.push("dns.googleapis.com");
+        }
         const apis = Array.from(new Set([...requiredApis, ...(args.apis ?? [])]));
 
         // Service-project-level default label; parent Project module adds
@@ -169,13 +196,14 @@ export class ServiceProject extends pulumi.ComponentResource {
             const blockSize = 10;
             const conditions: IamCondition[] = [];
 
-            for (let blockId = 0; blockId < Math.ceil(roles.length / blockSize); blockId++) {
-                const blockRoles = roles.slice(blockId * blockSize, (blockId + 1) * blockSize);
+            for (let blockIndex = 0; blockIndex < Math.ceil(roles.length / blockSize); blockIndex++) {
+                const blockRoles = roles.slice(blockIndex * blockSize, (blockIndex + 1) * blockSize);
+                const blockId = blockIndex + 1;
                 const rolesList = blockRoles.map(r => `'${r}'`).join(", ");
                 conditions.push({
                     role: "roles/resourcemanager.projectIamAdmin",
-                    title: `condition_block_${blockId + 1}`,
-                    description: `Condition Block ${blockId + 1}`,
+                    title: `condition_block_${blockId}`,
+                    description: `Condition Block ${blockId}`,
                     expression: `api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly([${rolesList}])`,
                     members: [...powerUserPrincipals],
                 });
@@ -237,9 +265,6 @@ export class ServiceProject extends pulumi.ComponentResource {
             stateBucketName = stateBucket.bucketName;
 
             // Seed-project-level bindings: bucketViewer for present principals.
-            // NOTE: Bound to the seed project (not the individual bucket) — grants
-            // list/metadata access to all state buckets in the seed project. Object-level
-            // access is handled separately via bucket-level bindings above.
             const seedViewers: pulumi.Input<string>[] = [];
             if (args.bindingsPowerUser) {
                 seedViewers.push(args.bindingsPowerUser.group);
@@ -258,6 +283,83 @@ export class ServiceProject extends pulumi.ComponentResource {
             }
         }
 
+        // Optional DNS zones.
+        const createdZones: pulumi.Output<{ zoneName: string; dnsName: string }>[] = [];
+
+        if (args.projectZones?.publicDefault) {
+            const rootZoneName = args.projectZones.publicDefault.rootZoneName;
+
+            // Look up root zone to acquire its dnsName (FQDN).
+            const rootZoneLookup = gcp.dns.getManagedZoneOutput({
+                name: rootZoneName,
+                project: args.seedProjectID,
+            }, { parent: this });
+
+            const rootZoneDnsName = rootZoneLookup.dnsName;
+
+            // Build child zone dnsName from project name + root zone FQDN.
+            const childDnsName = rootZoneDnsName.apply(rootDns => {
+                const normalised = rootDns.endsWith(".") ? rootDns : `${rootDns}.`;
+                return `${args.name}-${args.environment}.${normalised}`;
+            });
+
+            // Derive zoneName: dots replaced by hyphens, trailing hyphen removed.
+            const childZoneName = childDnsName.apply(dns => {
+                const withoutTrailingDot = dns.endsWith(".") ? dns.slice(0, -1) : dns;
+                return withoutTrailingDot.replace(/\./g, "-");
+            });
+
+            const publicDefaultZone = new DnsZone(`${name}-zone-default`, {
+                zoneName: childZoneName,
+                dnsName: childDnsName,
+                description: childDnsName.apply(dns => `DNS zone for ${dns}`),
+                visibility: "public",
+                project: project.projectId,
+                labels: projectLabels,
+            }, { parent: this });
+
+            // NS delegation record in the root zone.
+            new gcp.dns.RecordSet(`${name}-zone-default-ns`, {
+                managedZone: rootZoneName,
+                name: childDnsName,
+                type: "NS",
+                ttl: 300,
+                rrdatas: publicDefaultZone.nameServers,
+                project: args.seedProjectID,
+            }, { parent: this });
+
+            createdZones.push(pulumi.all([publicDefaultZone.zoneName, publicDefaultZone.dnsName]).apply(
+                ([zn, dn]) => ({ zoneName: zn, dnsName: dn })
+            ));
+        }
+
+        if (args.projectZones?.additional) {
+            for (const [dnsName, config] of Object.entries(args.projectZones.additional)) {
+                // Derive zoneName from dnsName if not provided.
+                const withoutTrailingDot = dnsName.endsWith(".") ? dnsName.slice(0, -1) : dnsName;
+                const zoneName = config.zoneName ?? withoutTrailingDot.replace(/\./g, "-");
+                const description = config.description ?? `DNS zone for ${dnsName}`;
+                const visibility = config.visibility ?? "public";
+
+                if (visibility === "private") {
+                    throw new Error("Private DNS zones are not yet supported.");
+                }
+
+                const zone = new DnsZone(`${name}-zone-${zoneName}`, {
+                    zoneName: zoneName,
+                    dnsName: dnsName,
+                    description: description,
+                    visibility: visibility,
+                    project: project.projectId,
+                    labels: projectLabels,
+                }, { parent: this });
+
+                createdZones.push(pulumi.all([zone.zoneName, zone.dnsName]).apply(
+                    ([zn, dn]) => ({ zoneName: zn, dnsName: dn })
+                ));
+            }
+        }
+
         this.projectDisplayName = project.projectDisplayName;
         this.projectId = project.projectId;
         this.projectNumber = project.projectNumber;
@@ -270,6 +372,9 @@ export class ServiceProject extends pulumi.ComponentResource {
         this.stateBucketName = stateBucketName
             ? stateBucketName.apply(n => n as string | null)
             : pulumi.output(null as string | null);
+        this.zones = createdZones.length > 0
+            ? pulumi.all(createdZones).apply(z => z as { zoneName: string; dnsName: string }[])
+            : pulumi.output(null as { zoneName: string; dnsName: string }[] | null);
         this.labels = project.labels;
 
         this.registerOutputs({
@@ -281,6 +386,7 @@ export class ServiceProject extends pulumi.ComponentResource {
             bindingsROUser: this.bindingsROUser,
             powerUserServiceAccountEmail: this.powerUserServiceAccountEmail,
             stateBucketName: this.stateBucketName,
+            zones: this.zones,
             labels: this.labels,
         });
     }
@@ -343,6 +449,12 @@ export class ServiceProject extends pulumi.ComponentResource {
                 throw new Error(
                     `'bindingsROUser.group' must be a 'group:' prefixed principal. Got '${args.bindingsROUser.group}'.`
                 );
+            }
+        }
+
+        if (args.projectZones?.publicDefault) {
+            if (!args.projectZones.publicDefault.rootZoneName || args.projectZones.publicDefault.rootZoneName.length === 0) {
+                throw new Error("'projectZones.publicDefault.rootZoneName' must be provided.");
             }
         }
     }

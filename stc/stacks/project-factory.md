@@ -38,6 +38,13 @@ bindingsROUserConfig: # (optional - takes priority over initiative common file d
     - <role_id_b>
 bindingsROUserPrincipal: <group: prefixed email of a read-only-user group in Google Identity> # (Required where bindingsROUserConfig provided)
 stateBucket: <[true|false] defaults to true> # (optional - takes priority over initiative common file definition if defined)
+defaultProjectZone: # (optional - overridable at the stack level)
+  rootZoneName: <zone resource name of the root zone. Created by the organisation stack>
+additionalProjectZones: # (optional, env-level only — not supported in initiative-common)
+  <dnsName>:
+    visibility: <[public | private] defaults to public>
+    zoneName: <name of zone> # (optional - derived from dnsName if not provided)
+    description: <description of zone> # (optional - derived from dnsName if not provided)
 labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
   <key>: <value>
 ```
@@ -54,8 +61,8 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
       * If it is also defined at the stack level, stack level takes priority
 
 ```yaml
-name: <project name base (combined with environment to form the display name and project ID base)>
-apis: # (optional)
+name: <project name base (combined with environment to form the display name and project ID base)> # (initiative-common only — not overridable at stack level)
+apis: # (optional, initiative-common only — arrays are not merged with env-level)
   - <one API>
 bindingsPowerUserConfig: # (optional - overridable at the stack level)
   sa: # (optional)
@@ -71,6 +78,8 @@ bindingsROUserConfig: # (optional - overridable at the stack level)
     - <role_id_a>
     - <role_id_b>
 stateBucket: <[true|false] defaults to true> # (optional - overridable at the stack level)
+defaultProjectZone: # (optional - overridable at the stack level)
+  rootZoneName: <zone resource name of the root zone. Created by the organisation stack>
 labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
   <key>: <value>
 ```
@@ -89,11 +98,10 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
   <key>: <value>
 ```
 
-<!--FUTURE ENHANCEMENT. EVENTUALLY ALL PARAMETERS AT THE ORG OR INITIATIVE LEVEL WILL BE OVERRIDABLE AT THE STACK YAML FILE LEVEL. FOR NOW, ONLY FOR IAM RELATED SETTINGS AND stateBucket-->
-
 * Config Resolution
   * Stack config (env-level): read via `new pulumi.Config("project-factory")` — Pulumi natively loads `Pulumi.<initiative>-<environment>.yaml` as the active stack config
   * Initiative-common and org-common files are NOT Pulumi stack configs — they are parsed manually at runtime:
+    * These files use flat keys (no `config:` namespace wrapping)
     * Use `js-yaml` to parse YAML files
     * Files are located in the stack directory (same directory as `index.ts`)
     * Read paths: `path.join(__dirname, \`Pulumi.${initiative}-common.yaml\`)` and `path.join(__dirname, "Pulumi-common.yaml")`
@@ -118,6 +126,8 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
     * `stateBucket` may be defined in `Pulumi.<initiative>-<env>.yaml` or `Pulumi.<initiative>-common.yaml`
       * Where defined in both files, prioritise `Pulumi.<initiative>-<env>.yaml` and throw warning
       * Defaults to `true` if not defined in either file
+    * `defaultProjectZone` may be defined in `Pulumi.<initiative>-<env>.yaml` or `Pulumi.<initiative>-common.yaml`
+      * Where defined in both files, prioritise `Pulumi.<initiative>-<env>.yaml` and throw warning
   * Create single project
     * Use `service-project` module
     * For the following parameters, do not perform additional validation or error handling. Underlying module will handle this
@@ -135,6 +145,8 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
       * `bindingsROUser.group` = `bindingsROUserPrincipal`
       * `bindingsROUser.bindings` = `bindingsROUserConfig.bindings`
       * `stateBucket` = `stateBucket`
+      * `projectZones.publicDefault` = `defaultProjectZone`
+      * `projectZones.additional` = `additionalProjectZones`
     * `labels` is optional for all yaml files
       * Sanitisation: pass user-provided config labels through `new Labels(...)` to sanitise into GCP-compliant format. Hardcoded labels defined in stack or module code are already compliant and do not require sanitisation.
       * Merge order (later wins on key collision): sanitised user org labels → sanitised user initiative labels → sanitised user env labels → stack hardcoded labels (`{ stack: "project-factory", initiative: "<initiative>", environment: "<environment>" }`) → module-level defaults
@@ -144,7 +156,7 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
   * projectDisplayName — `pulumi.Output<string>` — the project display name
   * projectId — `pulumi.Output<string>` — the `<name>-<environment>-<postfix>` string
   * projectNumber — `pulumi.Output<string>` — GCP-assigned numeric project identifier
-  * environment — `pulumi.Output<string>` — the environment name
+  * projectEnvironment — `pulumi.Output<string>` — the environment name
   * powerUserServiceAccountEmail — `pulumi.Output<string> | null` — SA email if enabled, null if not
   * stateBucketName — `pulumi.Output<string> | null` — final bucket name, null if stateBucket is false
   * labels — `pulumi.Output<{ [key: string]: string }>` — final merged map including module defaults

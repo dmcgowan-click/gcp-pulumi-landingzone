@@ -7,6 +7,7 @@ import { Labels } from "../../modules/labels";
 import { OrgPolicy } from "../../modules/org-policy";
 import { Project } from "../../modules/project";
 import { Storage } from "../../modules/storage";
+import { DnsZone } from "../../modules/dns-zone";
 
 const config = new pulumi.Config("organisation");
 const gcpConfig = new pulumi.Config("gcp");
@@ -39,6 +40,11 @@ const orgPolicyAdditional = config.getObject<{
     };
 }>("orgPolicyAdditional") || {};
 const userLabels = config.getObject<{ [key: string]: string }>("labels") || {};
+const rootZone = config.getObject<{
+    dnsName: string;
+    zoneName?: string;
+    description?: string;
+}>("rootZone");
 const region = gcpConfig.require("region");
 
 /**
@@ -300,6 +306,7 @@ function createFolders(
  * @param billingAccount The billing account ID
  * @param mergedLabels Labels merged from sanitised user labels and stack defaults
  * @param additionalApis Additional APIs to enable beyond the hardcoded set
+ * @param includeDnsApi Whether to enable dns.googleapis.com (required when a root DNS zone is created)
  * @returns The Project component
  */
 function createSeedProject(
@@ -307,6 +314,7 @@ function createSeedProject(
     billingAccount: string,
     mergedLabels: pulumi.Output<{ [key: string]: string }>,
     additionalApis: string[],
+    includeDnsApi: boolean,
 ): Project {
     const hardcodedApis = [
         "cloudresourcemanager.googleapis.com",
@@ -314,6 +322,9 @@ function createSeedProject(
         "iam.googleapis.com",
         "orgpolicy.googleapis.com",
     ];
+    if (includeDnsApi) {
+        hardcodedApis.push("dns.googleapis.com");
+    }
     const apis = [...new Set([...hardcodedApis, ...additionalApis])];
 
     return new Project("seed", {
@@ -416,6 +427,44 @@ function createStateBucket(
     });
 }
 
+/**
+ * Creates the root DNS zone under the seed project.
+ *
+ * @param seedProjectId The seed project ID (output from the Project module)
+ * @param zone The rootZone config (dnsName, optional zoneName, optional description)
+ * @param mergedLabels Labels merged from sanitised user labels and stack defaults
+ * @returns The DnsZone component
+ */
+function createRootZone(
+    seedProjectId: pulumi.Output<string>,
+    zone: { dnsName: string; zoneName?: string; description?: string },
+    mergedLabels: pulumi.Output<{ [key: string]: string }>,
+): DnsZone {
+    let zoneName: string;
+    if (zone.zoneName) {
+        zoneName = zone.zoneName;
+    } else {
+        zoneName = zone.dnsName.replace(/\.$/, "").replace(/\./g, "-");
+        const zoneNameRegex = /^[a-z]([a-z0-9-]*[a-z0-9])?$/;
+        if (zoneName.length < 1 || zoneName.length > 63 || !zoneNameRegex.test(zoneName)) {
+            throw new Error(
+                `Derived 'rootZone.zoneName' ('${zoneName}') from dnsName '${zone.dnsName}' is invalid. Provide an explicit 'rootZone.zoneName' (1-63 chars, lowercase letters/digits/hyphens, starting with a letter, not ending with a hyphen).`
+            );
+        }
+    }
+
+    const description = zone.description || `Root zone for ${zone.dnsName}`;
+
+    return new DnsZone("root-zone", {
+        project: seedProjectId,
+        zoneName: zoneName,
+        dnsName: zone.dnsName,
+        description: description,
+        visibility: "public",
+        labels: mergedLabels,
+    });
+}
+
 const folders = createFolders(organisation, domain, environments);
 
 const labelsModule = new Labels("org-labels", { labels: userLabels });
@@ -424,7 +473,7 @@ const mergedLabels = labelsModule.labels.apply((sanitised): { [key: string]: str
     stack: "organisation",
 }));
 
-const seedProject = createSeedProject(folders["common"].folderId, billing, mergedLabels, apisAdditional);
+const seedProject = createSeedProject(folders["common"].folderId, billing, mergedLabels, apisAdditional, rootZone !== undefined);
 
 // Org policy API calls with user ADC require a quota project. Use the seed
 // project as the quota/billing project, ensuring it (and its enabled
@@ -468,6 +517,8 @@ const orgAdminIam = createOrgAdminBindings(
 
 const stateBucket = createStateBucket(seedProject.projectId, region, mergedLabels);
 
+const rootZoneComponent = rootZone ? createRootZone(seedProject.projectId, rootZone, mergedLabels) : undefined;
+
 export const organisationOutput = organisation;
 export const foldersOutput = pulumi.output(
     Object.fromEntries(
@@ -485,4 +536,6 @@ export const projectSeedName = seedProject.projectDisplayName;
 export const projectSeedId = seedProject.projectId;
 export const projectSeedNumber = seedProject.projectNumber;
 export const storageBucketName = stateBucket.bucketName;
+export const rootZoneNameOutput = rootZoneComponent ? rootZoneComponent.zoneName : pulumi.output(null);
+export const rootZoneNameServersOutput = rootZoneComponent ? rootZoneComponent.nameServers : pulumi.output(null);
 export const orgPoliciesOutput = orgPolicies.length > 0 ? orgPolicies : null;

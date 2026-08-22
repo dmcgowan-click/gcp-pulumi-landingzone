@@ -15,5 +15,7 @@ bindingsROUserConfig: # (optional)
     - <role_id_a>
     - <role_id_b>
 stateBucket: true # (optional, defaults to true)
+defaultProjectZone: # (optional - overridable at stack level)
+  rootZoneName: <zone resource name of the root zone>
 labels: # (optional) - GCP project labels (keys/values: lowercase, digits, underscores, hyphens only; max 63 chars)
   <key>: <value>

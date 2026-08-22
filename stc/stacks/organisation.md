@@ -26,6 +26,10 @@ bindingsOrgAdmin:
   bindings:
     - <role_id_a>
     - <role_id_b>
+rootZone: # (optional)
+  dnsName: <valid FQDN that you own>
+  zoneName: <name of zone> # (optional - derived from dnsName if not provided)
+  description: <description of zone> # (optional - derived from dnsName if not provided)
 apisAdditional: # (optional)
   - <additional apis>
 orgPolicyDisableIAMExternalOrg: <[true|false] defaults to true> # (optional)
@@ -71,6 +75,8 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
       * cloudbilling.googleapis.com
       * iam.googleapis.com
       * orgpolicy.googleapis.com (required so the seed project can serve as the quota project for org policy API calls)
+    * APIs - Conditional
+      * `dns.googleapis.com` — added automatically when `rootZone` is provided
     * APIs - Additional
       * APIs `apisAdditional`
     * No IAM Bindings
@@ -177,6 +183,15 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
       * Principals: group + SA (if `sa.enabled` is `true`) — combine into a single IAM call
       * Transform input: for each role in `bindingsOrgAdmin.bindings`, create an entry `{ <role>: [<group>, <serviceAccount:sa-email>] }`
         * Omit SA principal if `sa.enabled` is `false` or `sa` is not provided
+  * If `rootZone` provided, create a root DNS zone
+    * Use `dns-zone` module
+    * Pulumi resource name: `root-zone`
+    * `project` = seed project ID (output from the Project module)
+    * `dnsName` = `rootZone.dnsName`. Use module validation
+    * `zoneName` = `rootZone.zoneName` if provided, else derived from `rootZone.dnsName` with trailing `.` removed and all other `.` replaced with `-`. The derived name must pass dns-zone module `zoneName` validation; if invalid, throw an error instructing the user to provide an explicit `zoneName`
+    * `description` = `rootZone.description` if provided, else `Root zone for <rootZone.dnsName>`
+    * `visibility` = public
+    * `labels` = same merged labels as seed project (sanitised user labels → `{ stack: "organisation" }` → module defaults)
   * `labels` is optional
     * Labels only apply to resources that support them (e.g. seed project). Folders do not support labels or tags.
     * Sanitisation: pass user-provided config labels through `new Labels(...)` to sanitise into GCP-compliant format. Hardcoded labels defined in stack or module code are already compliant and do not require sanitisation.
@@ -202,4 +217,8 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
   * projectSeedId — `pulumi.Output<string>` — seed project ID (name + postfix)
   * projectSeedNumber — `pulumi.Output<string>` — GCP-assigned numeric project identifier
   * storageBucketName — `pulumi.Output<string>` — final bucket name including postfix
+  * rootZoneName — `pulumi.Output<string> | null` — DNS zone resource name, null if `rootZone` not provided
+  * rootZoneNameServers — `pulumi.Output<string[]> | null` — assigned name servers, null if `rootZone` not provided
   * orgPolicies — `pulumi.Output<string[]> | null` — list of policy constraint names applied, null if none
+
+  Output exports use the Return field name suffixed with `Output` (e.g. `export const organisationOutput = ...`)

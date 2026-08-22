@@ -138,7 +138,10 @@ export class Project extends pulumi.ComponentResource {
         }
 
         this.projectDisplayName = pulumi.output(args.name);
-        this.projectId = project.projectId;
+        // Gate projectId behind API enablement so consumers implicitly wait
+        // for all services before operating on the project.
+        this.projectId = pulumi.all([project.projectId, ...serviceResources.map(s => s.service)])
+            .apply(([id]) => id);
         this.projectNumber = project.number;
         this.bindings = pulumi.output(
             args.bindings

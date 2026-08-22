@@ -93,3 +93,7 @@ config:
     #             - "<your-region-2>"
   organisation:labels: # (optional) - GCP project labels (keys/values: lowercase, digits, underscores, hyphens only; max 63 chars)
     <key>: <value>
+  # organisation:rootZone: # (optional) - creates a public root DNS zone under the seed project
+  #   dnsName: <valid FQDN that you own, e.g. gcp.example.com>
+  #   zoneName: <name of zone> # (optional - derived from dnsName if not provided)
+  #   description: <description of zone> # (optional - derived from dnsName if not provided)

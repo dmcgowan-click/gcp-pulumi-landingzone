@@ -86,8 +86,9 @@ The foundational Pulumi stack for GCP organisation-level resources. Located in `
 - **Org Admin IAM bindings** — assigns organisation-level roles to a Google Identity group, with optional service account creation for CI/CD
 - **Seed Project** — a shared project under the `common` folder with essential APIs enabled
 - **Pulumi State Bucket** — a GCS bucket for Pulumi state storage (with hex postfix for uniqueness)
+- **Root DNS Zone** (optional) — a public Cloud DNS zone in the seed project, used as the delegation parent for per-project child zones
 
-Uses the shared `folder`, `iam`, `project`, `storage`, and `labels` modules.
+Uses the shared `folder`, `iam`, `project`, `storage`, `dns-zone`, and `labels` modules.
 
 ### Identity Stack
 
@@ -106,7 +107,9 @@ Located in `stacks/project-factory/`, this stack provisions service projects usi
 2. **Initiative-common** (`Pulumi.<initiative>-common.yaml`) — per-initiative defaults (project name base, APIs, binding configs, labels)
 3. **Environment** (`Pulumi.<initiative>-<env>.yaml` / stack config) — per-environment overrides and principals
 
-Stack name must follow `<initiative>-<environment>` format (e.g. `myapp-dev`). Environment-level config takes priority over initiative-common for overridable parameters (`bindingsPowerUserConfig`, `bindingsROUserConfig`, `stateBucket`).
+Stack name must follow `<initiative>-<environment>` format (e.g. `myapp-dev`). Environment-level config takes priority over initiative-common for overridable parameters (`bindingsPowerUserConfig`, `bindingsROUserConfig`, `stateBucket`, `defaultProjectZone`).
+
+Optionally provisions DNS zones per project via `defaultProjectZone` (child zone delegated from the organisation root zone) and `additionalProjectZones` (arbitrary extra zones).
 
 Uses the `service-project`, `labels` modules. See `Pulumi-common.sample.yaml`, `Pulumi.myapp-common.sample.yaml`, and `Pulumi.myapp-dev.sample.yaml` for config templates.
 
@@ -129,7 +132,8 @@ Reusable Pulumi `ComponentResource` modules consumed by stacks via relative impo
 | IAM | `modules/iam/` | Non-authoritative IAM member bindings for organisation, folder, project, or resource targets. Supports conditional bindings via CEL expressions |
 | Labels | `modules/labels/` | Sanitises user-provided labels into GCP-compliant format |
 | Project | `modules/project/` | Creates a GCP project with APIs, default SA cleanup, optional IAM bindings and labels |
-| Service Project | `modules/service-project/` | Creates a GCP project in an environment folder with power-user/read-only IAM bindings, optional CICD service account, and optional Pulumi state bucket |
+| Service Project | `modules/service-project/` | Creates a GCP project in an environment folder with power-user/read-only IAM bindings, optional CICD service account, optional Pulumi state bucket, and optional DNS zones |
+| DNS Zone | `modules/dns-zone/` | Creates a GCP Cloud DNS managed zone (public) with labels, exports zone name and name servers |
 | Storage | `modules/storage/` | Creates a GCS bucket with optional postfix, multi-region support, IAM bindings and labels |
 
 ## Getting Started

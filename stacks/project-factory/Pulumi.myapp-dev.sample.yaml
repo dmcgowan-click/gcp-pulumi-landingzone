@@ -14,5 +14,12 @@ config:
   #     - <role_id_a>
   project-factory:bindingsROUserPrincipal: "<group:email@domain>" # (Required where bindingsROUserConfig provided)
   # project-factory:stateBucket: true # (optional - takes priority over initiative common, defaults to true)
+  # project-factory:defaultProjectZone: # (optional - takes priority over initiative common)
+  #   rootZoneName: <zone resource name of the root zone>
+  # project-factory:additionalProjectZones: # (optional, env-level only)
+  #   <dnsName>:
+  #     visibility: <public|private> # defaults to public
+  #     zoneName: <name of zone> # optional
+  #     description: <description> # optional
   project-factory:labels: # (optional) - GCP project labels (keys/values: lowercase, digits, underscores, hyphens only; max 63 chars)
     <key>: <value>
