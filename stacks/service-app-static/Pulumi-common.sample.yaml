@@ -1,0 +1,2 @@
+namePrefix: "<name for stack. Resources will be prefixed>"
+defaultLocation: "<valid gcp region for regional resources (e.g. australia-southeast1)>"

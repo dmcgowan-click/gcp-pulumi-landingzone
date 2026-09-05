@@ -1,0 +1,3 @@
+---
+dev: <project state bucket for dev (from project-factory outputs)>
+prod: <project state bucket for prod (from project-factory outputs)>

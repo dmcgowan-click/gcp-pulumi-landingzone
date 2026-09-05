@@ -5,8 +5,8 @@ Create a Pulumi module under `modules/service-project` to create a GCP project w
 * Builds on top of (composes) the `Project` module — `ServiceProject` is its own `pulumi.ComponentResource` (type `custom:modules:ServiceProject`, args `ServiceProjectArgs`) that instantiates the `Project` module internally as a child, then adds additional resources as needed. It does NOT use TypeScript inheritance (`class ServiceProject extends Project`), because a base `ComponentResource`'s `registerOutputs` conflicts with adding further children after `super()`.
 * Depends on resources created by the `organisation` stack (the environment folders and the seed project)
 * Dependencies
-  * Consumes the `project`, `iam`, `storage`, and `dns-zone` modules (via relative import)
-  * Uses `@pulumi/gcp` (`organizations.getFolders` for the environment-folder lookup, `serviceaccount.Account` for the power-user SA, `dns.getManagedZone` / `dns.RecordSet` for DNS delegation) and `@pulumi/pulumi`
+  * Consumes the `project`, `iam`, `storage`, `dns-zone`, and `org-policy` modules (via relative import)
+  * Uses `@pulumi/gcp` v8+ (`organizations.getFolders` for the environment-folder lookup, `serviceaccount.Account` for the power-user SA, `dns.getManagedZone` / `dns.RecordSet` for DNS delegation, `Provider` for quota-project scoped org policy calls) and `@pulumi/pulumi`. v8 is required because managed constraint `parameters` fields are not supported in v7.
   * Calling stack must include `@pulumi/random` in `package.json` (inherited via `Project` module composition — required for [CONV-POSTFIX])
 * Accept an input based on the following YAML definition
 
@@ -50,6 +50,7 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
 * Requirements
   * Input Types
     * `organisation`, `billing`, `seedProjectID`: [CONV-INPUT]
+    * `organisation` is also used to construct the `allowedPrincipalSets` value for the HTTPS LB service agent org policy override (see below)
     * `environment` must be a plain `string` (not an Output) — it is consumed at construction time to resolve the environment folder ID
     * `name` must be a plain `string` (not an Output) — it is consumed at construction time to form the combined `<name>-<environment>` passed to the Project module
     * `defaultLocation` must be a plain `string` (not an Output) — it is a config value used at construction time
@@ -74,6 +75,17 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
       * iam.googleapis.com
       * orgpolicy.googleapis.com (required so this project can serve as the quota project for potential org policy overrides)
       * `dns.googleapis.com` — added automatically when `projectZones` is provided
+  * HTTPS LB service agent org policy override
+    * When `compute.googleapis.com` is present in the combined API list (default + user-provided), create a project-level org policy override for the `iam.managed.allowedPolicyMembers` managed constraint
+    * The HTTPS LB service agent (`service-{PROJECT_NUMBER}@https-lb.iam.gserviceaccount.com`) is created when the Compute API is enabled but is not covered by the organisation-level `allowedPrincipalSets` principal set — it must be explicitly added via `allowedMemberSubjects`
+    * Create a `gcp.Provider` scoped to the new project (`billingProject` = project ID, `userProjectOverride: true`) — the OrgPolicy API requires a quota project when using user ADC credentials
+    * Use the `org-policy` module to create the override with:
+      * `project` = project ID output
+      * `policyName` = `iam.managed.allowedPolicyMembers`
+      * `parameters` = JSON containing:
+        * `allowedPrincipalSets`: `["//cloudresourcemanager.googleapis.com/organizations/<organisation>"]`
+        * `allowedMemberSubjects`: `["serviceAccount:service-<PROJECT_NUMBER>@https-lb.iam.gserviceaccount.com"]`
+      * Pass the quota provider via `providers` option and `dependsOn: [project]`
   * `bindingsPowerUser` (optional)
     * Validate that `bindingsPowerUser.group` starts with `group:` prefix at construction time. Error if not. Only `group:` principals are accepted for this input.
     * If `bindingsPowerUser.sa` is provided

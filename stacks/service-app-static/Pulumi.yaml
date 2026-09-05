@@ -1,0 +1,6 @@
+name: service-app-static
+runtime:
+  name: nodejs
+  options:
+    typescript: true
+description: GCP Pulumi LandingZone - Service App Static

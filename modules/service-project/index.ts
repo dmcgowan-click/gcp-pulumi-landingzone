@@ -2,6 +2,7 @@ import * as pulumi from "@pulumi/pulumi";
 import * as gcp from "@pulumi/gcp";
 import { Project } from "../project";
 import { Iam, IamCondition } from "../iam";
+import { OrgPolicy } from "../org-policy";
 import { Storage } from "../storage";
 import { DnsZone } from "../dns-zone";
 
@@ -154,6 +155,35 @@ export class ServiceProject extends pulumi.ComponentResource {
             apis: apis,
             labels: projectLabels,
         }, { parent: this });
+
+        // FUTURE ENHANCEMENT: There will be many use cases where default service accounts will require IAM bindings / policy adjustments.
+        //                     We may eventually look at moving this logic to it's own module to cut down on complexity here
+        // When compute API is enabled, the HTTPS LB service agent
+        // needs an allowedMemberSubjects exception at the project level.
+        const httpsLbApis = ["compute.googleapis.com"];
+        if (apis.some(api => httpsLbApis.includes(api))) {
+            const quotaProvider = new gcp.Provider(`${name}-quota-provider`, {
+                billingProject: project.projectId,
+                userProjectOverride: true,
+            }, { parent: this, dependsOn: [project] });
+
+            const allowedMemberSubjects = [
+                pulumi.interpolate`serviceAccount:service-${project.projectNumber}@https-lb.iam.gserviceaccount.com`,
+            ];
+            const allowedPrincipalSets = [`//cloudresourcemanager.googleapis.com/organizations/${args.organisation}`];
+            new OrgPolicy(`${name}-orgpolicy-https-lb-sa`, {
+                project: project.projectId,
+                policyName: "iam.managed.allowedPolicyMembers",
+                spec: {
+                    rules: [{
+                        enforce: "TRUE",
+                        parameters: pulumi.all(allowedMemberSubjects).apply(subjects =>
+                            JSON.stringify({ allowedPrincipalSets, allowedMemberSubjects: subjects }),
+                        ),
+                    } as any],
+                },
+            }, { parent: this, providers: [quotaProvider], dependsOn: [project] });
+        }
 
         // Optional CICD power-user service account, hosted in the seed project.
         let powerUserSaEmail: pulumi.Output<string> | undefined;

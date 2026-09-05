@@ -1,0 +1,2 @@
+config:
+  service-app-static:serviceProjectID: "<project ID for this given app / environment>"

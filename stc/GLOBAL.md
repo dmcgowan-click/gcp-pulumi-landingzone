@@ -40,9 +40,12 @@ Reusable rules referenced throughout by tag. Apply wherever referenced.
   * The `Makefile` must rsync both the stack directory and the `modules/` directory into the working directory so that relative imports from modules resolve correctly
   * `package.json` must be created based on the `import` blocks in the stack and consumed modules
   * `package-lock.json` does not need to be created, but may be created by the user at their discretion
-* Pulumi State Backend
-  * If `PULUMI_STATE_BUCKET` is set, login to GCS backend (`pulumi login gs://<bucket>`)
-  * If `PULUMI_STATE_BUCKET` is not set, use local state (`pulumi login --local`)
+* Pulumi State Backend — login priority: `state.yaml` in the stack directory > `PULUMI_STATE_BUCKET` env var > local state
+  * If `state.yaml` is present in the stack directory, login to the referenced GCS bucket (`pulumi login gs://<bucket>`)
+    * `landingzone` stacks: use the single `org` key (see Landing zone stack requirements)
+    * `service` stacks: select the bucket whose key matches the deployment environment (`STACK_ENV`) (see Service stack requirements)
+  * Else if `PULUMI_STATE_BUCKET` is set, login to that GCS backend (`pulumi login gs://<bucket>`)
+  * Else use local state (`pulumi login --local`)
 * All stacks are made up of discrete functions which may call modules as defined
   * Example for an organisation stack:
     * `createFolders(...)` — creates the `common` folder and environment folders
@@ -62,6 +65,32 @@ Reusable rules referenced throughout by tag. Apply wherever referenced.
 * Stack Outputs
   * Use module-level `export const` declarations for stack outputs (e.g. `export const myOutput = value`)
   * Do NOT use `pulumi.export("name", value)` — this is a Python SDK pattern and does not exist in the Node.js SDK
+* Landing zone stack requirements:
+  * This applies to any stack NOT prefixed with `service-`. These are designated as `landingzone` stacks
+    * Organisation level administrator access is required to deploy and administer these stacks
+    * All `landingzone` stack state files are stored together in the single organisation state bucket (created by the organisation stack)
+  * If using a state storage bucket, use the following file definition to reference the organisation state bucket
+    * Name `state.yaml`
+    * A single `org` key — every `landingzone` stack shares this same bucket
+    * Format: 
+```yaml
+---
+org: <org state bucket (created by the organisation stack)>
+```
+* Service stack requirements:
+  * This applies to any stack prefixed with `service-`. These are designated as `service` stacks. 
+    * These are intended to be built on top of `landingzone` stacks within a given project. Project level administrator or power user access is required to deploy and administer these stacks
+    * Deployment via organisation level administrator is possible, but does not follow best security practices
+    * Each `service` stack's state file is stored in the state bucket provisioned for its specific project (created by the project-factory stack) — NOT the shared organisation state bucket
+  * If using a state storage bucket, use the following file definition to reference the allocated project state bucket
+    * Name `state.yaml`
+    * One key per environment; the key must match the deployment environment (`STACK_ENV`) so the correct per-environment project bucket is selected at login
+    * Format: 
+```yaml
+---
+<env1 (e.g. dev, matches STACK_ENV)>: <project state bucket for env1 (created by the project-factory stack)>
+<env2 (e.g. prod, matches STACK_ENV)>: <project state bucket for env2 (created by the project-factory stack)>
+```
 
 ## Modules
 

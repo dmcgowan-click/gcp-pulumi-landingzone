@@ -1,8 +1,8 @@
-### cicd (Continuous Integration / Continuous Delivery)
+### CICD (Continuous Integration / Continuous Delivery)
 
 Create a Pulumi stack under `stacks/cicd` to create cicd and artifact components. For use by GitHub or other source control
 
-NOTE: cicd components leverage CloudBuild for now. Expansion to support compute from other services to be added later
+<!-- cicd components leverage CloudBuild for now. Expansion to support compute from other services to be added later -->
 
 * Accept an input based on the following YAML definition
 

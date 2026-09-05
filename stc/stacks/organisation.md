@@ -2,6 +2,9 @@
 
 Create a Pulumi stack under `stacks/organisation` to create org level components
 
+* Dependencies: `@pulumi/gcp`, `@pulumi/pulumi`, `@pulumi/random` (`@pulumi/random` is required transitively — the state bucket uses [CONV-POSTFIX])
+* Required provider config: `gcp:region` (read via `new pulumi.Config("gcp").require("region")`) — sets the state bucket location. Deployment fails if unset.
+* State backend: this is a `landingzone` stack whose state lives in the `org` bucket it creates. First deploy runs on local state; once the bucket exists, migrate to it (`make migrate-state`) and use it going forward (see README.md).
 * Accept an input based on the following YAML definition
 
 ```yaml
@@ -201,7 +204,7 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
     * Project module `labels` arg must accept `pulumi.Input<{ [key: string]: string }>` to support receiving Outputs
   * Create storage bucket for Pulumi state
     * Use `storage` module
-    * Name `pulumi-state-organisation`
+    * Name `org`
     * Postfix `true`
     * Project = seed project ID (output from the Project module)
     * Location = `gcp:region` from Pulumi config (read via `new pulumi.Config("gcp").require("region")`)
@@ -221,4 +224,4 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
   * rootZoneNameServers — `pulumi.Output<string[]> | null` — assigned name servers, null if `rootZone` not provided
   * orgPolicies — `pulumi.Output<string[]> | null` — list of policy constraint names applied, null if none
 
-  Output exports use the Return field name suffixed with `Output` (e.g. `export const organisationOutput = ...`)
+  Output exports use the Return field name suffixed with `Output` (e.g. `export const organisationOutput = ...`). This suffix convention is specific to the organisation stack and is NOT a global convention — other stacks export outputs under their own names.

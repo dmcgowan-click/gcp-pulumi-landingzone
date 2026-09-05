@@ -1,2 +1,2 @@
 ---
-pulumi-state-organisation: <get from outputs after initial deployment of organisation stack>
+org: <get from outputs after initial deployment of organisation stack>

@@ -135,6 +135,7 @@ Reusable Pulumi `ComponentResource` modules consumed by stacks via relative impo
 | Service Project | `modules/service-project/` | Creates a GCP project in an environment folder with power-user/read-only IAM bindings, optional CICD service account, optional Pulumi state bucket, and optional DNS zones |
 | DNS Zone | `modules/dns-zone/` | Creates a GCP Cloud DNS managed zone (public) with labels, exports zone name and name servers |
 | Storage | `modules/storage/` | Creates a GCS bucket with optional postfix, multi-region support, IAM bindings and labels |
+| IP Address | `modules/ip-address/` | Reserves an external IP address (Regional or Global) with labels, exports the allocated address and self link |
 
 ## Getting Started
 

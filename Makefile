@@ -11,8 +11,9 @@ GCP_REGION ?= australia-southeast1
 PULUMI_STACK ?= $(STACK_ENV)
 
 # Login to GCS backend. Priority: state.yaml in stack dir > PULUMI_STATE_BUCKET env var > local state
+# Bucket is selected from state.yaml by STACK_ENV (defaults to 'org' for landing zone stacks)
 define pulumi_login
-$(if $(shell test -f $(STACK_DIR)/state.yaml && echo yes),cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi login gs://$$(yq -r '.[]' state.yaml),$(if $(PULUMI_STATE_BUCKET),cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi login gs://$(PULUMI_STATE_BUCKET),cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi login --local))
+$(if $(shell test -f $(STACK_DIR)/state.yaml && echo yes),cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi login gs://$$(yq -r '.["$(STACK_ENV)"]' state.yaml),$(if $(PULUMI_STATE_BUCKET),cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi login gs://$(PULUMI_STATE_BUCKET),cd $(PULUMI_DIR)/$(STACK_DIR) && pulumi login --local))
 endef
 
 _check-vars:
@@ -74,7 +75,7 @@ up-infra: prepare-infra ## Deploy infrastructure with Pulumi
 
 migrate-state: _check-vars ## Migrate local Pulumi state to GCS backend (reads bucket from state.yaml)
 	@test -f "$(STACK_DIR)/state.yaml" || (echo "ERROR: $(STACK_DIR)/state.yaml not found. Create it with the GCS bucket name from stack outputs." && exit 1)
-	@BUCKET=$$(yq -r '.[]' $(STACK_DIR)/state.yaml); \
+	@BUCKET=$$(yq -r '.["$(STACK_ENV)"]' $(STACK_DIR)/state.yaml); \
 	PROJECT=$$(yq -r '.name' $(STACK_DIR)/Pulumi.yaml); \
 	LOCAL_STATE=$$HOME/.pulumi/stacks/$$PROJECT/$(PULUMI_STACK).json; \
 	test -f "$$LOCAL_STATE" || (echo "ERROR: Local state file not found at $$LOCAL_STATE" && exit 1); \
