@@ -46,6 +46,7 @@ Reusable rules referenced throughout by tag. Apply wherever referenced.
     * `service` stacks: select the bucket whose key matches the deployment environment (`STACK_ENV`) (see Service stack requirements)
   * Else if `PULUMI_STATE_BUCKET` is set, login to that GCS backend (`pulumi login gs://<bucket>`)
   * Else use local state (`pulumi login --local`)
+  * Every stack must provide a `state.sample.yaml` alongside `state.yaml` with the same keys but placeholder bucket values (committed as the template; `state.yaml` holds the real bucket names). `landingzone` stacks use the single `org` key; `service` stacks use one key per environment (matching `STACK_ENV`).
 * All stacks are made up of discrete functions which may call modules as defined
   * Example for an organisation stack:
     * `createFolders(...)` — creates the `common` folder and environment folders

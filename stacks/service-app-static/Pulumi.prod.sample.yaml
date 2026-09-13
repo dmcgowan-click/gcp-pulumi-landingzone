@@ -1,2 +1,6 @@
 config:
   service-app-static:serviceProjectID: "<project ID for this given app / environment>"
+  service-app-static:domains:
+    - domain: "<An FQDN for web access>"
+      zoneName: "<name of GCP zone to host the FQDN (optional)>"
+      primary: true

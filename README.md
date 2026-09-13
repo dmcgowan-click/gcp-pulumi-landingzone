@@ -122,6 +122,17 @@ Located in `stacks/cicd/`, this stack provisions CI/CD infrastructure. It create
 
 Auto-discovers the `common` folder if no folder ID is provided. Uses the shared `project` and `labels` modules. See `stacks/cicd/Pulumi.org.sample.yaml` for config template.
 
+### Service App Static Stack
+
+Located in `stacks/service-app-static/`, this `service` stack reserves the ingress primitives for a static web hosting service within a service project (provisioned by the Project Factory stack). It creates:
+
+- **Global IP address** — a reserved external global IP for the load balancer front end
+- **Certificate map** — a Certificate Manager certificate map with one Google-managed certificate per configured domain, plus an optional primary (SNI fallback) entry
+
+Config is per-environment (`Pulumi.<env>.yaml`) plus a shared `Pulumi-common.yaml` (name prefix, default location). Each domain may optionally reference a managed DNS zone; where omitted, you are responsible for creating the DNS records pointing at the reserved IP. State is stored in the project's per-environment state bucket. Uses the `ip-address`, `certificate`, and `labels` modules.
+
+> The storage backend, URL map, and load balancer that serve content are planned additions.
+
 ### Modules
 
 Reusable Pulumi `ComponentResource` modules consumed by stacks via relative import:
@@ -136,6 +147,7 @@ Reusable Pulumi `ComponentResource` modules consumed by stacks via relative impo
 | DNS Zone | `modules/dns-zone/` | Creates a GCP Cloud DNS managed zone (public) with labels, exports zone name and name servers |
 | Storage | `modules/storage/` | Creates a GCS bucket with optional postfix, multi-region support, IAM bindings and labels |
 | IP Address | `modules/ip-address/` | Reserves an external IP address (Regional or Global) with labels, exports the allocated address and self link |
+| Certificate | `modules/certificate/` | Creates either a classic Google-managed SSL certificate or a Certificate Manager certificate map (one certificate per domain, map entries, optional DNS authorization) |
 
 ## Getting Started
 
