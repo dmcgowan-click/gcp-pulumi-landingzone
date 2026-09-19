@@ -1,6 +1,6 @@
 ### Project
 
-Create a Pulumi module under `modules/project` to create a GCP project 
+Create a Pulumi `ComponentResource` module under `modules/project` to create a GCP project 
 
 * Additional dependencies: `@pulumi/random` (required in the calling stack's `package.json`)
 * Accept an input based on the following YAML definition

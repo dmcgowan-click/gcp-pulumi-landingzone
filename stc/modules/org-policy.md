@@ -1,6 +1,6 @@
 ### Org Policy
 
-Create a Pulumi module under `modules/org-policy` to manage organisation policies
+Create a Pulumi `ComponentResource` module under `modules/org-policy` to manage organisation policies
 
 * Accept an input based on the following YAML definition
 

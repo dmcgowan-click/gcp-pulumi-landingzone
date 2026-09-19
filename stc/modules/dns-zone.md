@@ -1,8 +1,8 @@
 ### DNS Zone
 
-Create a Pulumi module under `modules/dns-zone` to create a DNS zone
+Create a Pulumi `ComponentResource` module under `modules/dns-zone` to create a DNS zone
 
-* No additional dependencies beyond base requirements
+* No additional dependencies beyond `@pulumi/gcp` and `@pulumi/pulumi`
 * Accept an input based on the following YAML definition
 
 <!-- NOTE: Under development. Private zone support to be added -->

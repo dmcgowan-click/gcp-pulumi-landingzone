@@ -2,8 +2,6 @@
 
 Create a Pulumi `ComponentResource` module under `modules/load-balancer` to create a GCP global external application load balancer.
 
-* **ComponentResource interface:** `LoadBalancerArgs`
-* **ComponentResource type string:** `custom:modules:LoadBalancer`
 * **Additional dependencies:** `@pulumi/gcp`, `@pulumi/pulumi` (included in calling stack's `package.json`)
 
 > **Design note:** This module currently supports global external application load balancers with bucket backends only. Regional LBs, service backends, and split-backend modules are out of scope.
@@ -113,7 +111,7 @@ labels: # (optional) — merged per [CONV-LABELS]
                       * Path matcher = `rule`, which must conform to Pulumi `gcp.compute.URLMapPathMatcherArgs` (minus `name`, which the module generates as `<name>-<host key>`)
                         * `rule` must exist
                         * `defaultService` and `service` fields within `rule` reference backend keys defined in `backend`. The module resolves these to the created backend bucket self-links at apply time.
-* Outputs
-  * `ipAddress`: `pulumi.Output<string>` — The IP address of the forwarding rule (ephemeral or static)
-  * `urlMapSelfLink`: `pulumi.Output<string>` — Self-link of the URL Map
-  * `forwardingRuleSelfLinks`: `pulumi.Output<string>[]` — Self-links of created forwarding rules
+* Return
+  * ipAddress — `pulumi.Output<string>` — The IP address of the forwarding rule (ephemeral or static)
+  * urlMapSelfLink — `pulumi.Output<string>` — Self-link of the URL Map
+  * forwardingRuleSelfLinks — `pulumi.Output<string>[]` — Self-links of created forwarding rules

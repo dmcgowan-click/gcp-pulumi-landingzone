@@ -1,6 +1,6 @@
 ### Folder
 
-Create a Pulumi module under `modules/folder` to create a GCP resource folder
+Create a Pulumi `ComponentResource` module under `modules/folder` to create a GCP resource folder
 
 * Accept an input based on the following YAML definition
 

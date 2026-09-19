@@ -37,8 +37,8 @@ labels: # (optional) — merged per [CONV-LABELS]
       * `region`: Required when `external.type` is `Regional`. Error if not provided. Must not be provided when `external.type` is `Global` — error if provided. Region format validation deferred to GCP API [CONV-VALIDATE-API].
       * `ipVersion`: Optional. Must be one of `IPv4` or `IPv6`. Default to `IPv4` if not provided. Error with descriptive message if an unrecognised value is provided. IPv6 + Regional compatibility deferred to GCP API [CONV-VALIDATE-API].
 * Return
-  * `address` — `pulumi.Output<string>` — the allocated IP address
-  * `name` — `pulumi.Output<string>` — the resource name
-  * `selfLink` — `pulumi.Output<string>` — the self link URI of the reserved address
-  * `addressType` — `pulumi.Output<string>` — `"EXTERNAL"`
-  * `labels` — `pulumi.Output<{ [key: string]: string }>` — final merged map including module defaults
+  * address — `pulumi.Output<string>` — the allocated IP address
+  * name — `pulumi.Output<string>` — the resource name
+  * selfLink — `pulumi.Output<string>` — the self link URI of the reserved address
+  * addressType — `pulumi.Output<string>` — `"EXTERNAL"`
+  * labels — `pulumi.Output<{ [key: string]: string }>` — final merged map including module defaults

@@ -1,6 +1,6 @@
 ### Storage
 
-Create a Pulumi module under `modules/storage` to create a storage bucket
+Create a Pulumi `ComponentResource` module under `modules/storage` to create a storage bucket
 
 * Additional dependencies: `@pulumi/random` (required in the calling stack's `package.json`)
 * Accept an input based on the following YAML definition

@@ -1,6 +1,6 @@
 ### Labels
 
-Create a Pulumi module under `modules/labels` to sanitise labels into GCP-compliant format (and in future, manage tagging)
+Create a Pulumi `ComponentResource` module under `modules/labels` to sanitise labels into GCP-compliant format (and in future, manage tagging)
 
 * Accept an input based on the following YAML definition
 

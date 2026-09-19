@@ -2,8 +2,6 @@
 
 Create a Pulumi `ComponentResource` module under `modules/certificate` to create either A) a single classic Google-managed SSL certificate, or B) a Certificate Manager certificate map containing one or more certificates.
 
-* **ComponentResource interface:** `CertificateArgs`
-* **ComponentResource type string:** `custom:modules:Certificate`
 * **Additional dependencies:** `@pulumi/gcp`, `@pulumi/pulumi` (included in calling stack's `package.json`)
 
 > **Design note:** Two mutually exclusive modes:
@@ -113,11 +111,11 @@ certificateMap: # (mutually exclusive with certificate)
       * If `authorisationType` = `LB`
         * No DNS authorizations are created; the certificate is validated by the load balancer it is attached to
 * Return
-  * `mode` — `"certificate" | "certificateMap"` — which mode was created
-  * `managedCertificateId` — `pulumi.Output<string>` — id/self-link of the classic managed SSL certificate (`certificate` mode only)
-  * `certificateMapId` — `pulumi.Output<string>` — resource id of the CertificateMap (`certificateMap` mode only)
-  * `certificateMapName` — `pulumi.Output<string>` — short name of the CertificateMap (`certificateMap` mode only)
-  * `certificateMapResourceUrl` — `pulumi.Output<string>` — the certificate map reference in `//certificatemanager.googleapis.com/projects/<project>/locations/global/certificateMaps/<name>` format; this is the value the `load-balancer` module's `certificateMap` input expects (`certificateMap` mode only)
-  * `certificateIds` — `pulumi.Output<string>[]` — ids of created Certificate Manager certificates (`certificateMap` mode only)
-  * `dnsAuthorizationRecords` — `pulumi.Output<{ name: string; type: string; data: string }>[]` — DNS records created for DNS-authorized certificates (`certificateMap` + `DNS` only)
-  * `labels` — `pulumi.Output<{ [key: string]: string }>` — final merged labels applied to Certificate Manager resources
+  * mode — `"certificate" | "certificateMap"` — which mode was created
+  * managedCertificateId — `pulumi.Output<string>` — id/self-link of the classic managed SSL certificate (`certificate` mode only)
+  * certificateMapId — `pulumi.Output<string>` — resource id of the CertificateMap (`certificateMap` mode only)
+  * certificateMapName — `pulumi.Output<string>` — short name of the CertificateMap (`certificateMap` mode only)
+  * certificateMapResourceUrl — `pulumi.Output<string>` — the certificate map reference in `//certificatemanager.googleapis.com/projects/<project>/locations/global/certificateMaps/<name>` format; this is the value the `load-balancer` module's `certificateMap` input expects (`certificateMap` mode only)
+  * certificateIds — `pulumi.Output<string>[]` — ids of created Certificate Manager certificates (`certificateMap` mode only)
+  * dnsAuthorizationRecords — `pulumi.Output<{ name: string; type: string; data: string }>[]` — DNS records created for DNS-authorized certificates (`certificateMap` + `DNS` only)
+  * labels — `pulumi.Output<{ [key: string]: string }>` — final merged labels applied to Certificate Manager resources

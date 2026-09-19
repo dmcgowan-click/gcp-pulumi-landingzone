@@ -16,5 +16,31 @@ config:
       # cleanupPolicies: <delete | keep> # (optional, default delete)
       # labels: # (optional)
       #   <key>: <value>
+  # cicd:cloudBuild: # (optional) - 2nd gen Cloud Build repository links
+  #   repositoryLinks:
+  #     <link_name>:
+  #       connection: <short name of a pre-existing 2nd gen connection in the cicd project at defaultLocation>
+  #       repositories:
+  #         - remoteUri: <git remote URI, e.g. https://github.com/owner/repo.git>
+  #           # name: <repository resource name (optional - default: derived from link_name and repo slug)>
+  #   triggers: # (optional) - one or more Cloud Build triggers
+  #     <trigger_name>:
+  #       # description: <trigger description (optional)>
+  #       event: <push-to-branch | push-new-tag | pull-request>
+  #       source:
+  #         linkName: <link_name as defined in repositoryLinks>
+  #         remoteUri: <remoteUri as defined under that link_name's repositories>
+  #       # branch: <branch/tag regex (optional - defaults to .*)>
+  #       configuration:
+  #         inlineCustom:
+  #           steps:
+  #             - name: ubuntu
+  #               args:
+  #                 - echo
+  #                 - hello world
+  #       cicdSaAssume: # exactly one of orgSa / serviceProjectIDs
+  #         orgSa: <true | false>
+  #         # serviceProjectIDs:
+  #         #   - <service project id>
   # cicd:labels: # (optional)
   #   <key>: <value>

@@ -1,6 +1,6 @@
 ### IAM
 
-Create a Pulumi module under `modules/iam` to manage IAM bindings
+Create a Pulumi `ComponentResource` module under `modules/iam` to manage IAM bindings
 
 * Accept an input based on the following YAML definition
   * NOTE: No authoritative option by design. Have never used this option in practice, and accidental usage has caused major problems in the past

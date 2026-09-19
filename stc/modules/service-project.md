@@ -1,8 +1,8 @@
 ### Service Project
 
-Create a Pulumi module under `modules/service-project` to create a GCP project within an environment folder
+Create a Pulumi `ComponentResource` module under `modules/service-project` to create a GCP project within an environment folder
 
-* Builds on top of (composes) the `Project` module — `ServiceProject` is its own `pulumi.ComponentResource` (type `custom:modules:ServiceProject`, args `ServiceProjectArgs`) that instantiates the `Project` module internally as a child, then adds additional resources as needed. It does NOT use TypeScript inheritance (`class ServiceProject extends Project`), because a base `ComponentResource`'s `registerOutputs` conflicts with adding further children after `super()`.
+* Builds on top of (composes) the `Project` module — `ServiceProject` is its own `pulumi.ComponentResource` that instantiates the `Project` module internally as a child, then adds additional resources as needed. It does NOT use TypeScript inheritance (`class ServiceProject extends Project`), because a base `ComponentResource`'s `registerOutputs` conflicts with adding further children after `super()`.
 * Depends on resources created by the `organisation` stack (the environment folders and the seed project)
 * Dependencies
   * Consumes the `project`, `iam`, `storage`, `dns-zone`, and `org-policy` modules (via relative import)
