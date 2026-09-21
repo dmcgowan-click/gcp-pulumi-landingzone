@@ -31,6 +31,10 @@ config:
   #         linkName: <link_name as defined in repositoryLinks>
   #         remoteUri: <remoteUri as defined under that link_name's repositories>
   #       # branch: <branch/tag regex (optional - defaults to .*)>
+  #       # includedFiles: # (optional) - build only runs when a changed file matches one of these globs
+  #       #   - <glob pattern, e.g. modules/**>
+  #       # ignoredFiles: # (optional) - changes limited to these globs will not fire the build
+  #       #   - <glob pattern, e.g. **/*.md>
   #       configuration:
   #         inlineCustom:
   #           steps:

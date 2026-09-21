@@ -13,8 +13,11 @@ import { Iam } from "../iam";
  * @param event The repository event that fires the trigger
  * @param source Full 2nd gen repository resource name
  * @param branch Branch (or tag, for push-new-tag) regex to trigger on (defaults to ".*")
+ * @param includedFiles Glob patterns; the build only runs when a changed file matches one of them
+ * @param ignoredFiles Glob patterns; changes limited to matching files will not fire the build
  * @param configuration Build configuration (only inline-custom supported)
  * @param saAssume Service account emails the trigger SA may impersonate (serviceAccountTokenCreator)
+ * @param requireApproval When true, builds require manual approval before they run
  */
 export interface CloudBuildTriggerArgs {
     name: string;
@@ -24,12 +27,15 @@ export interface CloudBuildTriggerArgs {
     event: "push-to-branch" | "push-new-tag" | "pull-request";
     source: pulumi.Input<string>;
     branch?: string;
+    includedFiles?: pulumi.Input<string>[];
+    ignoredFiles?: pulumi.Input<string>[];
     configuration?: {
         type?: string;
         location?: string;
         inlineCustom?: gcp.types.input.cloudbuild.TriggerBuild;
     };
     saAssume?: pulumi.Input<string>[];
+    requireApproval?: boolean;
 }
 
 /**
@@ -87,13 +93,17 @@ export class CloudBuildTrigger extends pulumi.ComponentResource {
             description,
             serviceAccount: pulumi.interpolate`projects/${args.project}/serviceAccounts/${sa.email}`,
             repositoryEventConfig,
+            includedFiles: args.includedFiles,
+            ignoredFiles: args.ignoredFiles,
+            approvalConfig: args.requireApproval ? { approvalRequired: true } : undefined,
             build,
         }, { parent: this });
 
-        new Iam(`${name}-artifact-reader`, {
+        new Iam(`${name}-project-iam`, {
             project: args.project,
             bindings: {
                 "roles/artifactregistry.reader": [saMember],
+                "roles/logging.logWriter": [saMember]
             },
         }, { parent: this });
 
@@ -192,6 +202,17 @@ export class CloudBuildTrigger extends pulumi.ComponentResource {
             for (const entry of args.saAssume) {
                 if (typeof entry === "string" && entry.trim() === "") {
                     throw new Error("Each 'saAssume' entry must be a non-empty service account email.");
+                }
+            }
+        }
+
+        for (const field of ["includedFiles", "ignoredFiles"] as const) {
+            const patterns = args[field];
+            if (patterns) {
+                for (const entry of patterns) {
+                    if (typeof entry === "string" && entry.trim() === "") {
+                        throw new Error(`Each '${field}' entry must be a non-empty glob pattern.`);
+                    }
                 }
             }
         }

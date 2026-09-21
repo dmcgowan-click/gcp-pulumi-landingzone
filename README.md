@@ -119,7 +119,7 @@ Located in `stacks/cicd/`, this stack provisions CI/CD infrastructure. It create
 
 - **CICD Project** — a dedicated GCP project under the `common` folder with Artifact Registry and related APIs enabled
 - **Artifact Registries** — configurable repositories supporting Docker, npm, and Python formats with cleanup policies (30-day TTL, untagged image cleanup for Docker), optional multi-region placement, and immutable tag policies (Docker only)
-- **Cloud Build triggers** — optional triggers (push-to-branch, push-new-tag, pull-request) each with a dedicated custom service account that can read Artifact Registry and impersonate the org or per-project CICD service accounts
+- **Cloud Build triggers** — optional triggers (push-to-branch, push-new-tag, pull-request) each with a dedicated custom service account that can read Artifact Registry and impersonate the org or per-project CICD service accounts. Triggers support `includedFiles`/`ignoredFiles` path filters (so each fires only on relevant changes) and an optional manual approval gate (`requireApproval`) for applies
 
 Auto-discovers the `common` folder if no folder ID is provided. Uses the shared `project`, `labels`, and `cloudbuild-trigger` modules. See `stacks/cicd/Pulumi.org.sample.yaml` for config template.
 
@@ -149,7 +149,7 @@ Reusable Pulumi `ComponentResource` modules consumed by stacks via relative impo
 | Storage | `modules/storage/` | Creates a GCS bucket with optional postfix, multi-region support, IAM bindings and labels |
 | IP Address | `modules/ip-address/` | Reserves an external IP address (Regional or Global) with labels, exports the allocated address and self link |
 | Certificate | `modules/certificate/` | Creates either a classic Google-managed SSL certificate or a Certificate Manager certificate map (one certificate per domain, map entries, optional DNS authorization) |
-| Cloud Build Trigger | `modules/cloudbuild-trigger/` | Creates a Cloud Build trigger (push-to-branch, push-new-tag, or pull-request) with a dedicated custom service account, Artifact Registry read access, and optional service account impersonation bindings |
+| Cloud Build Trigger | `modules/cloudbuild-trigger/` | Creates a Cloud Build trigger (push-to-branch, push-new-tag, or pull-request) with a dedicated custom service account, Artifact Registry read access, optional service account impersonation bindings, `includedFiles`/`ignoredFiles` path filters, and an optional manual approval gate |
 
 ## Getting Started
 
@@ -181,30 +181,19 @@ Previous steps will have created a GCP Storage Bucket for storage of the Pulumi 
 
 ### Setting Up and Running GCP Stacks
 
-All stacks will have one of the following sample configuration files
+#### Organisation Stacks (e.g, organisation, identity)
+
+Stacks will have one of the following sample configuration file
 
 * `Pulumi.org.sample.yaml` for org wide deployments
-* `Pulumi.ENV.sample.yaml` for deployments that will span across multiple environments (example, project factory)
 
-Rename the files to the following accordingly
+Rename the file to the following accordingly
 
 * `Pulumi.org.yaml`
-* `Pulumi.dev.yaml` #dev is an example
-* `Pulumi.prod.yaml` #prod is an example
 
 And populate the values accordingly. Overwhelmed?! Start small and expand as needed
 
-All stacks can be run as follows after the bootstrap step
-
-**Org Only stacks (e.g, organisation, identity)**
-```bash
-make up-infra STACK_DIR=stacks/<stack folder name>
-```
-
-**Per Environment Stacks (e.g, project-factory)**
-```bash
-make up-infra STACK_DIR=stacks/<stack folder name> STACK_ENV=<where yaml is Pulumi.dev.yaml, env is 'dev'>
-```
+**Strongly Recommended**
 
 All stacks will contain the following configuration file, the same as the organisation stack used in the bootstrap step
 
@@ -212,22 +201,22 @@ All stacks will contain the following configuration file, the same as the organi
 
 While not required, it is highly recommended to set this up so your Pulumi state is managed in the cloud, and not a local system. This is not just for backup, but also so multiple engineers can manage the same stack
 
-Rename file to the following and populate with the stack bucket name (created after bootstrap)
+Rename file to the following and populate as follows
 
 * `state.yaml`
 
-#### Extra Setup for the Identity Stack
+```yaml
+---
+org: <organisation pulumi state bucket (this value can be found after the bootstrap step. e.g, pulumi-state-organisation-65d2)>
+```
 
-The Identity stack requires some additional configuration as it technically uses the Google Workspace provider. Perform these steps once you have completed above. This must be manually performed
+All stacks can be run as follows
 
-* In the GCP console, locate the service account created under the organisation stack (will be in the seed project) and copy the **Unique ID**
-* In the Google Admin console, go to Security > Access and data control > API Controls > MANAGE DOMAIN WIDE DELEGATION
-* Click Add new, enter the **Unique ID** from previously then add the following OAuth scopes
-   * `https://www.googleapis.com/auth/admin.directory.user`
-   * `https://www.googleapis.com/auth/admin.directory.group`
-   * `https://www.googleapis.com/auth/admin.directory.group.member`
+```bash
+make up-infra STACK_DIR=stacks/<stack folder name>
+```
 
-#### Extra Instructions for the Project Factory stack
+#### Project Factory stack
 
 Project factory works a bit differently to other stacks, due to the overhead required to provision a full service project. 
 
@@ -262,6 +251,23 @@ cp stacks/project-factory/Pulumi.myapp-dev.sample.yaml stacks/project-factory/Pu
 
 And populate the values accordingly. Overwhelmed?! As before, start small and expand as needed. And use your agents to help!
 
+**Strongly Recommended**
+
+Project factory stack will contain the following configuration file, the same as the organisation stack used in the bootstrap step
+
+* `state.sample.yaml`
+
+While not required, it is highly recommended to set this up so your Pulumi state is managed in the cloud, and not a local system. This is not just for backup, but also so multiple engineers can manage the same stack
+
+Rename file to the following and populate as follows
+
+* `state.yaml`
+
+```yaml
+---
+org: <organisation pulumi state bucket (this value can be found after the bootstrap step. e.g, pulumi-state-organisation-65d2)>
+```
+
 **Deploying a project:**
 
 The stack name must match the `<initiative>-<environment>` pattern from the filename. For example, to deploy the project defined in `Pulumi.myapp-dev.yaml`:
@@ -275,3 +281,53 @@ To deploy the same initiative to production (`Pulumi.myapp-prod.yaml`):
 ```bash
 make up-infra STACK_DIR=stacks/project-factory STACK_ENV=myapp-prod
 ```
+
+#### Application Stacks (e.g, service-app-static)
+
+Stacks will have one of the following sample configuration files
+
+* `Pulumi.ENV.sample.yaml` for deployments that will span across multiple environments (example, service-app-static)
+
+Copy and rename the files to the following accordingly. Produce a file for each environment you will deploy to
+
+* `Pulumi.dev.yaml` #dev is an example
+* `Pulumi.prod.yaml` #prod is an example
+
+And populate the values accordingly. Overwhelmed?! Start small and expand as needed
+
+**Strongly Recommended**
+
+All stacks will contain the following configuration file, the same as the organisation stack used in the bootstrap step
+
+* `state.sample.yaml`
+
+While not required, it is highly recommended to set this up so your Pulumi state is managed in the cloud, and not a local system. This is not just for backup, but also so multiple engineers can manage the same stack
+
+Rename file to the following and populate as follows
+
+* `state.yaml`
+
+```yaml
+---
+dev: <project pulumi state bucket (this value can be found after a service project is created via the project factory stack. e.g, pulumi-state-myapp-dev-7f23)>
+prod: <project pulumi state bucket (this value can be found after a service project is created via the project factory stack. e.g, pulumi-state-myapp-prod-b98c)>
+# Add more entries as needed. Each entry should correspond to a GCP project and a Pulumi.ENV.yaml file
+```
+
+All stacks can be run as follows
+
+**Per Environment Stacks (e.g, service-app-static)**
+```bash
+make up-infra STACK_DIR=stacks/<stack folder name> STACK_ENV=<where yaml is Pulumi.dev.yaml, env is 'dev'>
+```
+
+#### Extra Setup for the Identity Stack
+
+The Identity stack requires some additional configuration as it technically uses the Google Workspace provider. Perform these steps once you have completed above. This must be manually performed
+
+* In the GCP console, locate the service account created under the organisation stack (will be in the seed project) and copy the **Unique ID**
+* In the Google Admin console, go to Security > Access and data control > API Controls > MANAGE DOMAIN WIDE DELEGATION
+* Click Add new, enter the **Unique ID** from previously then add the following OAuth scopes
+   * `https://www.googleapis.com/auth/admin.directory.user`
+   * `https://www.googleapis.com/auth/admin.directory.group`
+   * `https://www.googleapis.com/auth/admin.directory.group.member`

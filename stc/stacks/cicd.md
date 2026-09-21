@@ -38,6 +38,10 @@ cloudBuild: # (optional) — 2nd gen Cloud Build repository links, created in th
         linkName: <link_name as defined in repositoryLinks>
         remoteUri: <remoteUri as defined under that link_name's repositories>
       branch: <branch (or tag, for push-new-tag) regex to trigger on (optional - defaults to .*)>
+      includedFiles: # (optional) - glob patterns; the build only runs when a changed file matches one of them
+        - <glob pattern, e.g. modules/**>
+      ignoredFiles: # (optional) - glob patterns; changes limited to matching files will not fire the build
+        - <glob pattern, e.g. **/*.md>
       configuration:
         inlineCustom: # required — valid Cloud Build definition; maps to the cloudbuild-trigger module's configuration.inlineCustom (typed gcp.types.input.cloudbuild.TriggerBuild)
           # steps:
@@ -49,6 +53,7 @@ cloudBuild: # (optional) — 2nd gen Cloud Build repository links, created in th
         orgSa: <[true | false] (mutually exclusive with serviceProjectIDs)>
         serviceProjectIDs: # (mutually exclusive with orgSa). If set, one or more service project ID's must be provided
           - <service project id>
+      requireApproval: <bool (optional, default: false) — when true, builds require manual approval before they run; maps to the cloudbuild-trigger module's requireApproval>
 labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
   <key>: <value>
 ```
@@ -138,7 +143,10 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
         * `event` = `event`
         * `source` = the full 2nd gen repository resource name of the repository identified by `source.linkName` + `source.remoteUri`. Resolve the repository name using the **same** derivation as `createRepositoryLinks` (the entry's `name` if provided, otherwise `<link_name>-<slug>` where `<slug>` is sanitised from `remoteUri`), producing `projects/<cicd project ID>/locations/<defaultLocation>/connections/<connection>/repositories/<repoName>`. `source.linkName` + `source.remoteUri` must match an entry created under `repositoryLinks`; error otherwise
         * `branch` = `branch` (omit when not provided — the module defaults to `.*`)
+        * `includedFiles` = `includedFiles` (optional; passed through unchanged)
+        * `ignoredFiles` = `ignoredFiles` (optional; passed through unchanged)
         * `configuration.inlineCustom` = `configuration.inlineCustom` (cast to `gcp.types.input.cloudbuild.TriggerBuild`)
+        * `requireApproval` = `requireApproval` (optional; passed through unchanged — when `true`, the module sets the trigger's `approvalConfig.approvalRequired`)
         * `saAssume` = resolved from `cicdSaAssume` (exactly one of `orgSa` / `serviceProjectIDs`):
           * If `orgSa` is `true`: look up the org CICD service account (`cicd-org`, created by the organisation stack) in the seed project via `gcp.serviceaccount.getAccountOutput({ accountId: "cicd-org", project: seedProjectID })`; `saAssume` = `[<that SA email>]`
           * If `serviceProjectIDs`: for each service project ID, strip the 4-char [CONV-POSTFIX] to get `<slug>`, then look up the project CICD (power-user) service account `cicd-<slug>` (created by the service-project module) in the seed project via `gcp.serviceaccount.getAccountOutput({ accountId: "cicd-<slug>", project: seedProjectID })`; `saAssume` = the list of resolved SA emails
