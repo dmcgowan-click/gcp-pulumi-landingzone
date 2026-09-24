@@ -40,6 +40,7 @@ const cloudBuildConfig = config.getObject<{
             ignoredFiles?: string[];
             configuration: { inlineCustom: unknown };
             cicdSaAssume: { orgSa?: boolean; serviceProjectIDs?: string[] };
+            artifactWrite?: boolean;
             requireApproval?: boolean;
         };
     };
@@ -369,7 +370,7 @@ function resolveCicdSaAssume(
  * @returns Map of trigger name to its Cloud Build trigger ID
  */
 function createTriggers(
-    triggers: { [triggerName: string]: { description?: string; event: string; source: { linkName: string; remoteUri: string }; branch?: string; includedFiles?: string[]; ignoredFiles?: string[]; configuration: { inlineCustom: unknown }; cicdSaAssume: { orgSa?: boolean; serviceProjectIDs?: string[] }; requireApproval?: boolean } },
+    triggers: { [triggerName: string]: { description?: string; event: string; source: { linkName: string; remoteUri: string }; branch?: string; includedFiles?: string[]; ignoredFiles?: string[]; configuration: { inlineCustom: unknown }; cicdSaAssume: { orgSa?: boolean; serviceProjectIDs?: string[] }; artifactWrite?: boolean; requireApproval?: boolean } },
     projectId: pulumi.Output<string>,
     location: string,
     seedProject: string,
@@ -399,6 +400,7 @@ function createTriggers(
                 inlineCustom: def.configuration.inlineCustom as gcp.types.input.cloudbuild.TriggerBuild,
             },
             saAssume,
+            artifactWrite: def.artifactWrite,
             requireApproval: def.requireApproval,
         });
 

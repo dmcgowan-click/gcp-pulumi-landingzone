@@ -119,7 +119,7 @@ Located in `stacks/cicd/`, this stack provisions CI/CD infrastructure. It create
 
 - **CICD Project** — a dedicated GCP project under the `common` folder with Artifact Registry and related APIs enabled
 - **Artifact Registries** — configurable repositories supporting Docker, npm, and Python formats with cleanup policies (30-day TTL, untagged image cleanup for Docker), optional multi-region placement, and immutable tag policies (Docker only)
-- **Cloud Build triggers** — optional triggers (push-to-branch, push-new-tag, pull-request) each with a dedicated custom service account that can read Artifact Registry and impersonate the org or per-project CICD service accounts. Triggers support `includedFiles`/`ignoredFiles` path filters (so each fires only on relevant changes) and an optional manual approval gate (`requireApproval`) for applies
+- **Cloud Build triggers** — optional triggers (push-to-branch, push-new-tag, pull-request) each with a dedicated custom service account that can read Artifact Registry and impersonate the org or per-project CICD service accounts. Triggers support `includedFiles`/`ignoredFiles` path filters (so each fires only on relevant changes), an optional `artifactWrite` flag (grants the build SA write to any registry, e.g. to build and push container images), and an optional manual approval gate (`requireApproval`) for applies
 
 Auto-discovers the `common` folder if no folder ID is provided. Uses the shared `project`, `labels`, and `cloudbuild-trigger` modules. See `stacks/cicd/Pulumi.org.sample.yaml` for config template.
 
@@ -149,7 +149,7 @@ Reusable Pulumi `ComponentResource` modules consumed by stacks via relative impo
 | Storage | `modules/storage/` | Creates a GCS bucket with optional postfix, multi-region support, IAM bindings and labels |
 | IP Address | `modules/ip-address/` | Reserves an external IP address (Regional or Global) with labels, exports the allocated address and self link |
 | Certificate | `modules/certificate/` | Creates either a classic Google-managed SSL certificate or a Certificate Manager certificate map (one certificate per domain, map entries, optional DNS authorization) |
-| Cloud Build Trigger | `modules/cloudbuild-trigger/` | Creates a Cloud Build trigger (push-to-branch, push-new-tag, or pull-request) with a dedicated custom service account, Artifact Registry read access, optional service account impersonation bindings, `includedFiles`/`ignoredFiles` path filters, and an optional manual approval gate |
+| Cloud Build Trigger | `modules/cloudbuild-trigger/` | Creates a Cloud Build trigger (push-to-branch, push-new-tag, or pull-request) with a dedicated custom service account, Artifact Registry read access (or write when `artifactWrite` is set), optional service account impersonation bindings, `includedFiles`/`ignoredFiles` path filters, and an optional manual approval gate |
 
 ## Getting Started
 

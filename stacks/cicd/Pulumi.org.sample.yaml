@@ -46,5 +46,7 @@ config:
   #         orgSa: <true | false>
   #         # serviceProjectIDs:
   #         #   - <service project id>
+  #       # artifactWrite: <true | false (optional, default false) — grant the build SA write to any artifact registry, e.g. for docker build/push>
+  #       # requireApproval: <true | false (optional, default false) — builds require manual approval before they run>
   # cicd:labels: # (optional)
   #   <key>: <value>

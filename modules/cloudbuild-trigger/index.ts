@@ -17,6 +17,7 @@ import { Iam } from "../iam";
  * @param ignoredFiles Glob patterns; changes limited to matching files will not fire the build
  * @param configuration Build configuration (only inline-custom supported)
  * @param saAssume Service account emails the trigger SA may impersonate (serviceAccountTokenCreator)
+ * @param artifactWrite When true, grants the trigger SA artifactregistry.writer on the project (write to any registry)
  * @param requireApproval When true, builds require manual approval before they run
  */
 export interface CloudBuildTriggerArgs {
@@ -35,6 +36,7 @@ export interface CloudBuildTriggerArgs {
         inlineCustom?: gcp.types.input.cloudbuild.TriggerBuild;
     };
     saAssume?: pulumi.Input<string>[];
+    artifactWrite?: boolean;
     requireApproval?: boolean;
 }
 
@@ -99,12 +101,15 @@ export class CloudBuildTrigger extends pulumi.ComponentResource {
             build,
         }, { parent: this });
 
+        const projectBindings: { [role: string]: pulumi.Input<string>[] } = {
+            // writer supersedes reader; use writer alone when artifact push is required
+            [args.artifactWrite ? "roles/artifactregistry.writer" : "roles/artifactregistry.reader"]: [saMember],
+            "roles/logging.logWriter": [saMember],
+        };
+
         new Iam(`${name}-project-iam`, {
             project: args.project,
-            bindings: {
-                "roles/artifactregistry.reader": [saMember],
-                "roles/logging.logWriter": [saMember]
-            },
+            bindings: projectBindings,
         }, { parent: this });
 
         if (args.saAssume) {

@@ -53,6 +53,7 @@ cloudBuild: # (optional) — 2nd gen Cloud Build repository links, created in th
         orgSa: <[true | false] (mutually exclusive with serviceProjectIDs)>
         serviceProjectIDs: # (mutually exclusive with orgSa). If set, one or more service project ID's must be provided
           - <service project id>
+      artifactWrite: <bool (optional, default: false) — when true, grants the trigger SA write to any artifact registry; maps to the cloudbuild-trigger module's artifactWrite>
       requireApproval: <bool (optional, default: false) — when true, builds require manual approval before they run; maps to the cloudbuild-trigger module's requireApproval>
 labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
   <key>: <value>
@@ -146,6 +147,7 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
         * `includedFiles` = `includedFiles` (optional; passed through unchanged)
         * `ignoredFiles` = `ignoredFiles` (optional; passed through unchanged)
         * `configuration.inlineCustom` = `configuration.inlineCustom` (cast to `gcp.types.input.cloudbuild.TriggerBuild`)
+        * `artifactWrite` = `artifactWrite` (optional; passed through unchanged — when `true`, the module grants the trigger SA `roles/artifactregistry.writer` on the cicd project)
         * `requireApproval` = `requireApproval` (optional; passed through unchanged — when `true`, the module sets the trigger's `approvalConfig.approvalRequired`)
         * `saAssume` = resolved from `cicdSaAssume` (exactly one of `orgSa` / `serviceProjectIDs`):
           * If `orgSa` is `true`: look up the org CICD service account (`cicd-org`, created by the organisation stack) in the seed project via `gcp.serviceaccount.getAccountOutput({ accountId: "cicd-org", project: seedProjectID })`; `saAssume` = `[<that SA email>]`

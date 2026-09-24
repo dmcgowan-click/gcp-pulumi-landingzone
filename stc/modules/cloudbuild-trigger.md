@@ -9,7 +9,7 @@ Create a Pulumi `ComponentResource` module under `modules/cloudbuild-trigger` to
 
 ```yaml
 name: <string, required — GCP resource name prefix. Validated: ^[a-z]([-a-z0-9]*[a-z0-9])?$, max 63 chars>
-project: <project ID string, required — project where the trigger and its service account are created, and where roles/artifactregistry.reader is granted>
+project: <project ID string, required — project where the trigger and its service account are created, and where Artifact Registry access (reader, or writer when artifactWrite is true) is granted>
 description: <string (optional, default: "Trigger <name>")>
 region: <valid region, required — the trigger location>
 event: <[push-to-branch | push-new-tag | pull-request], required>
@@ -30,6 +30,7 @@ configuration:
     #       - hello world
 saAssume: # (optional) — service account emails the trigger SA is granted permission to impersonate (roles/iam.serviceAccountTokenCreator)
   - <service account email>
+artifactWrite: <bool (optional, default: false) — when true, grants the trigger SA roles/artifactregistry.writer on the project (write to any registry) instead of reader>
 requireApproval: <bool (optional, default: false) — when true, builds require manual approval before they run>
 ```
 
@@ -47,6 +48,7 @@ requireApproval: <bool (optional, default: false) — when true, builds require 
     * `ignoredFiles` is optional. Where provided, each entry must be a non-empty glob pattern. Glob syntax validation deferred to the GCP API [CONV-VALIDATE-API].
     * `description` if not provided defaults to `Trigger <name>`
     * `saAssume` is optional. Where provided, each entry must be a non-empty service account email; existence deferred to the GCP API [CONV-VALIDATE-API]
+    * `artifactWrite` is optional, defaults to `false`. Boolean.
     * `requireApproval` is optional, defaults to `false`. Boolean.
     * `configuration`
       * `type` is optional, defaults to `Cloud Build configuration file`. Only this value is supported — error otherwise.
@@ -83,11 +85,11 @@ requireApproval: <bool (optional, default: false) — when true, builds require 
     * Description = `Service Account for <description>. Assume to authorised service accounts` (`description` = default description if not otherwise provided)
   * Grant project IAM via the `iam` module (always granted)
     * The created `cb-<name>` SA is granted, on `project`:
-      * `roles/artifactregistry.reader` — so build steps can pull and read all artifacts across the project's registries
+      * Artifact Registry access — `roles/artifactregistry.writer` when `artifactWrite` = `true` (so build steps can push/write to any registry across the project), otherwise `roles/artifactregistry.reader` (pull/read only). `writer` supersedes `reader`, so only one is granted
       * `roles/logging.logWriter` — so the custom SA can write build logs to Cloud Logging (required by the `CLOUD_LOGGING_ONLY` build logging default)
     * Use a single `iam` component named `<name>-project-iam` with:
       * `project` = `project`
-      * `bindings` = `{ roles/artifactregistry.reader: [serviceAccount:<cb-<name> SA email>], roles/logging.logWriter: [serviceAccount:<cb-<name> SA email>] }`
+      * `bindings` = `{ <roles/artifactregistry.writer if artifactWrite else roles/artifactregistry.reader>: [serviceAccount:<cb-<name> SA email>], roles/logging.logWriter: [serviceAccount:<cb-<name> SA email>] }`
   * Grant assume (token creator) permissions via the `iam` module
     * `saAssume` is optional. Where provided, the created `cb-<name>` SA is granted `roles/iam.serviceAccountTokenCreator` on each listed service account so it may impersonate them
     * For each service account email in `saAssume` (index `i`):
