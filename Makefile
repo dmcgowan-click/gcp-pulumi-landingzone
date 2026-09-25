@@ -1,4 +1,4 @@
-.PHONY: help prepare-infra preview-infra up-infra migrate-state dev-setup
+.PHONY: help prepare-infra preview-infra up-infra migrate-state dev-setup seed-index
 
 .DEFAULT_GOAL := help
 help: ## Show this help message
@@ -83,3 +83,19 @@ migrate-state: _check-vars ## Migrate local Pulumi state to GCS backend (reads b
 	echo "Migrating local state to gs://$$BUCKET/$$GCS_PATH"; \
 	gsutil cp "$$LOCAL_STATE" "gs://$$BUCKET/$$GCS_PATH" && \
 	echo "State migrated successfully to gs://$$BUCKET/$$GCS_PATH"
+
+seed-index: _check-vars ## Seed resources/index.html into the site bucket, only if index.html is absent
+	@ROOT=$$(pwd); \
+	SRC="$$ROOT/$(STACK_DIR)/resources/index.html"; \
+	test -f "$$SRC" || { echo "ERROR: seed file $$SRC not found"; exit 1; }; \
+	cd $(STACK_DIR); \
+	if [ -f state.yaml ]; then pulumi login gs://$$(yq -r '.["$(STACK_ENV)"]' state.yaml) >/dev/null 2>&1; fi; \
+	pulumi stack select $(PULUMI_STACK) >/dev/null 2>&1 || { echo "ERROR: Pulumi stack '$(PULUMI_STACK)' not found - deploy with up-infra first"; exit 1; }; \
+	BUCKET=$$(pulumi stack output bucketName 2>/dev/null); \
+	test -n "$$BUCKET" || { echo "ERROR: could not read 'bucketName' stack output - deploy with up-infra first"; exit 1; }; \
+	if gcloud storage objects describe gs://$$BUCKET/index.html >/dev/null 2>&1; then \
+		echo "index.html already exists in gs://$$BUCKET - skipping upload"; \
+	else \
+		echo "No index.html in gs://$$BUCKET - uploading $$SRC"; \
+		gcloud storage cp "$$SRC" gs://$$BUCKET/index.html; \
+	fi

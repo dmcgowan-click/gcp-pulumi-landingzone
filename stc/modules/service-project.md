@@ -19,6 +19,7 @@ name: <project name base (combined with environment to form the display name and
 defaultLocation: <valid gcp region for regional resources (e.g. australia-southeast1)>
 apis: # (optional)
   - <one API>
+cicdProjectID: <cicd project ID> # (optional) - when provided, the power-user group is granted CI/artifact roles on this project
 bindingsPowerUser: # (optional)
   group: <group: prefixed email of a power-user group in Google Identity>
   sa: # (optional)
@@ -54,6 +55,7 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
     * `environment` must be a plain `string` (not an Output) — it is consumed at construction time to resolve the environment folder ID
     * `name` must be a plain `string` (not an Output) — it is consumed at construction time to form the combined `<name>-<environment>` passed to the Project module
     * `defaultLocation` must be a plain `string` (not an Output) — it is a config value used at construction time
+    * `cicdProjectID` (optional): [CONV-INPUT] — a CICD project ID
     * `bindingsPowerUser.group`, `bindingsROUser.group`: plain `string` (not `Input<string>`) — validated at construction time (must start with `group:` prefix)
     * `rootZoneName` (within `projectZones.publicDefault`): plain `string` — a GCP DNS managed zone resource name
     * `bindingsPowerUser.bindingProjectIAM` is optional. Where provided, it is a list of role IDs (`string[]`) that the group (and SA if enabled) are permitted to grant via `roles/resourcemanager.projectIamAdmin`. Must not be empty if provided.
@@ -75,6 +77,12 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
       * iam.googleapis.com
       * orgpolicy.googleapis.com (required so this project can serve as the quota project for potential org policy overrides)
       * `dns.googleapis.com` — added automatically when `projectZones` is provided
+  * `cicdProjectID` (optional)
+    * When provided AND `bindingsPowerUser` is provided, grant `bindingsPowerUser.group` roles at the CICD project level, so power users can run/view Cloud Build triggers and view Artifact Registry artifacts in the CICD project.
+      * Use the `iam` module with `project` = `cicdProjectID` and bindings:
+        * `roles/cloudbuild.builds.editor`: `[bindingsPowerUser.group]`
+        * `roles/artifactregistry.reader`: `[bindingsPowerUser.group]`
+    * Caters for the CICD project potentially not existing: when `cicdProjectID` is not provided, no CICD-project roles are assigned. The caller omits the input when there is no CICD project.
   * HTTPS LB service agent org policy override
     * When `compute.googleapis.com` is present in the combined API list (default + user-provided), create a project-level org policy override for the `iam.managed.allowedPolicyMembers` managed constraint
     * The HTTPS LB service agent (`service-{PROJECT_NUMBER}@https-lb.iam.gserviceaccount.com`) is created when the Compute API is enabled but is not covered by the organisation-level `allowedPrincipalSets` principal set — it must be explicitly added via `allowedMemberSubjects`

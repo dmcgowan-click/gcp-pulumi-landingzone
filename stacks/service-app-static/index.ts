@@ -2,19 +2,22 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import * as pulumi from "@pulumi/pulumi";
+import * as gcp from "@pulumi/gcp";
 import * as yaml from "js-yaml";
 import { Labels } from "../../modules/labels";
 import { IpAddress } from "../../modules/ip-address";
 import { Certificate } from "../../modules/certificate";
+import { Storage } from "../../modules/storage";
+import { LoadBalancer } from "../../modules/load-balancer";
 
-// Environment is the Pulumi stack name (Pulumi.<environment>.yaml).
+// Environment is the Pulumi stack name (Pulumi.<environment>.yaml) and must equal STACK_ENV.
 const environment = pulumi.getStack();
 
 /**
  * A single domain entry from the stack `domains` config.
  *
  * @param domain An FQDN for web access
- * @param zoneName Optional managed DNS zone name (reserved for future DNS record creation)
+ * @param zoneName Optional pre-existing managed DNS zone; when set an A record is created in it
  * @param primary When true, mark this domain's certificate as the SNI fallback
  */
 interface DomainEntry {
@@ -39,6 +42,17 @@ function readYamlFile(filename: string): Record<string, unknown> {
 }
 
 /**
+ * Slugifies an FQDN into a GCP-name-safe fragment: lowercase, every run of
+ * non-[a-z0-9] characters replaced by a single hyphen, leading/trailing hyphens stripped.
+ *
+ * @param domain The FQDN to slugify
+ * @returns The slugified fragment (e.g. www.example.com -> www-example-com)
+ */
+function slugify(domain: string): string {
+    return domain.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+/**
  * Builds a deterministic, GCP-compliant certificate key for a domain.
  * Slugifies the FQDN, appends a short SHA-256 suffix for uniqueness, and
  * truncates the slug so the full key stays within 63 characters.
@@ -50,7 +64,7 @@ function readYamlFile(filename: string): Record<string, unknown> {
  */
 function certificateKey(prefix: string, domain: string, env: string): string {
     const hash6 = crypto.createHash("sha256").update(domain).digest("hex").slice(0, 6);
-    const fullSlug = domain.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    const fullSlug = slugify(domain);
     const maxSlugLen = 63 - `${prefix}-cert--${hash6}-${env}`.length;
     let slug = fullSlug;
     if (slug.length > maxSlugLen) {
@@ -59,9 +73,12 @@ function certificateKey(prefix: string, domain: string, env: string): string {
     return `${prefix}-cert-${slug}-${hash6}-${env}`;
 }
 
+const NAME_REGEX = /^[a-z]([-a-z0-9]*[a-z0-9])?$/;
+
 // --- Common input (Pulumi-common.yaml) ---
 const common = readYamlFile("Pulumi-common.yaml");
 const namePrefix = common.namePrefix as string;
+const defaultLocation = common.defaultLocation as string;
 
 // --- Stack input (env-level Pulumi config) ---
 const config = new pulumi.Config("service-app-static");
@@ -72,6 +89,21 @@ const userLabels = config.getObject<{ [key: string]: string }>("labels") || {};
 // --- Validation ---
 if (!namePrefix || namePrefix.trim() === "") {
     throw new Error("Pulumi-common.yaml 'namePrefix' must be provided and non-empty");
+}
+if (!NAME_REGEX.test(namePrefix) || namePrefix.length > 63) {
+    throw new Error(
+        `Pulumi-common.yaml 'namePrefix' ('${namePrefix}') must match ^[a-z]([-a-z0-9]*[a-z0-9])?$ (lowercase alphanumeric and hyphens, starting with a lowercase letter) and be max 63 characters, as it prefixes every resource name.`,
+    );
+}
+// Storage bucket name is `<namePrefix>-sitestatic-<env>` and must be <=58 chars before the postfix.
+const bucketBaseName = `${namePrefix}-sitestatic-${environment}`;
+if (bucketBaseName.length > 58) {
+    throw new Error(
+        `Storage bucket name '${bucketBaseName}' exceeds 58 characters (reserved for the postfix). Shorten 'namePrefix'.`,
+    );
+}
+if (!defaultLocation || defaultLocation.trim() === "") {
+    throw new Error("Pulumi-common.yaml 'defaultLocation' must be provided and non-empty");
 }
 if (!serviceProjectID || serviceProjectID.trim() === "") {
     throw new Error("service-app-static:serviceProjectID must be provided and non-empty");
@@ -100,6 +132,7 @@ for (const entry of domains) {
 }
 
 // --- Labels ---
+// The `labels` module requires at least one entry, so only sanitise when the user supplied labels.
 const stackLabels: pulumi.Output<{ [key: string]: string }> = Object.keys(userLabels).length > 0
     ? new Labels("service-app-static-labels", { labels: userLabels }).labels.apply(sanitised => ({
         ...sanitised,
@@ -120,11 +153,14 @@ const globalIp = new IpAddress(`${namePrefix}-ip-global`, {
 });
 
 // --- Generate a certificate map (one certificate per domain) ---
-const certificates: { [key: string]: { domains: string; primary?: boolean } } = {};
+const certificates: {
+    [key: string]: { domains: string; primary?: boolean; labels: pulumi.Output<{ [key: string]: string }> };
+} = {};
 for (const entry of domains) {
     const key = certificateKey(namePrefix, entry.domain, environment);
     certificates[key] = {
         domains: entry.domain,
+        labels: stackLabels,
         ...(entry.primary !== undefined ? { primary: entry.primary } : {}),
     };
 }
@@ -138,10 +174,81 @@ const certificate = new Certificate(`${namePrefix}-certmap`, {
     },
 });
 
+// --- Create a storage bucket ---
+const bucket = new Storage(`${namePrefix}-sitestatic`, {
+    name: bucketBaseName,
+    postfix: true,
+    project: serviceProjectID,
+    location: defaultLocation,
+    labels: stackLabels,
+});
+
+// --- Create a load balancer ---
+const loadBalancer = new LoadBalancer(`${namePrefix}-lb`, {
+    name: `${namePrefix}-lb-ext-global-${environment}`,
+    project: serviceProjectID,
+    type: {
+        application: {
+            external: {
+                regionGlobal: {
+                    frontend: {
+                        tls: {
+                            protocol: {
+                                type: "HTTPS",
+                                certificateMap: certificate.certificateMapName!,
+                            },
+                            ipAddress: {
+                                type: "static",
+                                addressName: globalIp.name,
+                            },
+                        },
+                    },
+                    backend: {
+                        "storage-static": {
+                            bucket: {
+                                bucketName: bucket.bucketName,
+                            },
+                            cloudCDN: {
+                                enabled: true,
+                            },
+                        },
+                    },
+                    routing: {
+                        mode: "advancedHostAndPathRule",
+                        defaultBackend: "storage-static",
+                    },
+                },
+            },
+        },
+    },
+    labels: stackLabels,
+});
+
+// --- Create FQDN A records for domains that supply a pre-existing managed zone ---
+export const dnsRecordNames: pulumi.Output<string>[] = [];
+for (const entry of domains) {
+    if (entry.zoneName && entry.zoneName.trim() !== "") {
+        const dnsName = entry.domain.endsWith(".") ? entry.domain : `${entry.domain}.`;
+        const record = new gcp.dns.RecordSet(`${namePrefix}-dnsrec-${slugify(entry.domain)}-${environment}`, {
+            project: serviceProjectID,
+            managedZone: entry.zoneName,
+            name: dnsName,
+            type: "A",
+            ttl: 300,
+            rrdatas: [globalIp.address],
+        });
+        dnsRecordNames.push(record.name);
+    }
+}
+
 // --- Stack outputs ---
 export const ipAddress = globalIp.address;
 export const ipAddressName = globalIp.name;
 export const ipAddressSelfLink = globalIp.selfLink;
-export const certificateMapResourceUrl = certificate.certificateMapResourceUrl;
-export const certificateMapName = certificate.certificateMapName;
-export const certificateMapId = certificate.certificateMapId;
+export const certificateMapResourceUrl = certificate.certificateMapResourceUrl!;
+export const certificateMapName = certificate.certificateMapName!;
+export const certificateMapId = certificate.certificateMapId!;
+export const bucketName = bucket.bucketName;
+export const loadBalancerIpAddresses = loadBalancer.ipAddresses;
+export const loadBalancerUrlMapSelfLink = loadBalancer.urlMapSelfLink;
+export const loadBalancerForwardingRuleSelfLinks = loadBalancer.forwardingRuleSelfLinks;

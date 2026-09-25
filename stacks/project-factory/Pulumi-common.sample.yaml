@@ -2,5 +2,6 @@ organisation: "<organisation numeric ID>"
 billing: "<billing account id (format: XXXXXX-XXXXXX-XXXXXX)>"
 seedProjectID: "<seed project ID>"
 defaultLocation: "<valid gcp region (e.g. australia-southeast1)>"
+cicdProjectID: "<cicd project ID>" # (optional) - when set, the power-user group is granted CI/artifact roles on the CICD project
 labels: # (optional) - GCP project labels (keys/values: lowercase, digits, underscores, hyphens only; max 63 chars)
   <key>: <value>

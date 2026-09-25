@@ -64,6 +64,7 @@ export interface ServiceProjectZones {
  * @param name The project name base (combined with environment to form the display name and project ID base)
  * @param defaultLocation A valid GCP region used for regional resources (e.g. the state bucket location)
  * @param apis Optional additional GCP APIs to enable (appended to the required set)
+ * @param cicdProjectID Optional CICD project ID. When provided (and bindingsPowerUser is set), the power-user group is granted roles to run/view Cloud Build triggers and view Artifact Registry artifacts in that project. Omit when no CICD project exists.
  * @param bindingsPowerUser Optional power-user bindings applied to the project
  * @param bindingsROUser Optional read-only-user bindings applied to the project
  * @param stateBucket Whether to create a Pulumi state bucket under the seed project (defaults to true)
@@ -78,6 +79,7 @@ export interface ServiceProjectArgs {
     name: string;
     defaultLocation: string;
     apis?: string[];
+    cicdProjectID?: pulumi.Input<string>;
     bindingsPowerUser?: ServiceProjectPowerUser;
     bindingsROUser?: ServiceProjectROUser;
     stateBucket?: boolean;
@@ -245,6 +247,20 @@ export class ServiceProject extends pulumi.ComponentResource {
                     "roles/resourcemanager.projectIamAdmin": [...powerUserPrincipals],
                 },
                 conditions: conditions,
+            }, { parent: this });
+        }
+
+        // Power-user CICD project bindings: grant the group access to run/view
+        // Cloud Build triggers and view Artifact Registry artifacts. Only
+        // created when a CICD project ID is supplied (the caller omits it when
+        // no CICD project exists).
+        if (args.cicdProjectID && args.bindingsPowerUser) {
+            new Iam(`${name}-poweruser-cicd-iam`, {
+                project: args.cicdProjectID,
+                bindings: {
+                    "roles/cloudbuild.builds.editor": [args.bindingsPowerUser.group],
+                    "roles/artifactregistry.reader": [args.bindingsPowerUser.group],
+                },
             }, { parent: this });
         }
 

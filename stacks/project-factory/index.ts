@@ -50,6 +50,7 @@ const organisation = orgCommon.organisation as string;
 const billing = orgCommon.billing as string;
 const seedProjectID = orgCommon.seedProjectID as string;
 const defaultLocation = orgCommon.defaultLocation as string;
+const cicdProjectID = orgCommon.cicdProjectID as string | undefined;
 
 // Initiative-common parameters
 const name = initiativeCommon.name as string;
@@ -207,6 +208,7 @@ const serviceProject = new ServiceProject(`${initiative}-${environment}`, {
     name: name,
     defaultLocation: defaultLocation,
     apis: apis,
+    cicdProjectID: cicdProjectID,
     bindingsPowerUser: bindingsPowerUser,
     bindingsROUser: bindingsROUser,
     stateBucket: stateBucket,

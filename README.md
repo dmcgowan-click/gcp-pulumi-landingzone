@@ -18,11 +18,21 @@ That's where a landing zone comes in. It handles the difficult plumbing for you 
 
 **Why Pulumi TypeScript and not Terraform?**
 
-Coming from a DevOps background, we always wanted to encourage developers to own not only their application, but also the infrastructure it ran on. However Terraform became a barrier to this, as it became yet another language developers had to learn. We found that using an application-native language reduced the barrier to developers understanding, maintaining, and contributing to their own infrastructure. This improved cross-team collaboration and reduced knowledge silos — exactly what a good DevOps culture should accomplish!
+Coming from a DevOps background, we always wanted to encourage developers to own not only their application, but also the infrastructure it ran on. However Terraform became a barrier to this, as it became yet another language developers had to learn. We found that using an application-native language reduced the barrier to developers maintaining, and contributing to their own infrastructure. This improved cross-team collaboration and reduced knowledge silos — exactly what a good DevOps culture should accomplish!
 
 ## Architecture
 
-TO BE UPDATED
+### Folder / Project Topology
+
+See [docs/folder-project-topology.md](docs/folder-project-topology.md) for the folder and project structure.
+
+[![Folder / Project Topology](docs/folder-project-topology.png)](docs/folder-project-topology.md)
+
+### Access Pattern
+
+See [docs/access-pattern.md](docs/access-pattern.md) for the identity and access model.
+
+[![Access Pattern](docs/access-pattern.png)](docs/access-pattern.md)
 
 ## Components
 
@@ -67,15 +77,13 @@ The Makefile provides the primary interface for infrastructure operations and su
 
 ### Standard Template Constructs (STC)
 
-UNDER CONSTRUCTION
-
 An AI experiment (naming convention inspired by the Warhammer 40,000k universe)
 
 Intention is to create a series of `stc` documents that provide detailed descriptions of the components and modules required for the landing zone. This also comes with a `stc` skill to instruct a LLM on how to read and action the documents. The idea been that you can point an LLM to these documents, and reproduce the codebase.
 
-INSTRUCTIONS TO USE THE STC SKILL TO BE ADDED
-
 The `stc/` directory contains specification documents that define how stacks and modules should be generated. These serve as blueprints for AI-assisted code generation and ensure consistency across the codebase.
+
+<!-- Add Usage Steps Here -->
 
 ### Organisation Stack
 

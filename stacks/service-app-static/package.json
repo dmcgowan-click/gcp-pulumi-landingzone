@@ -8,6 +8,7 @@
   "dependencies": {
     "@pulumi/gcp": "^8",
     "@pulumi/pulumi": "^3",
+    "@pulumi/random": "^4",
     "js-yaml": "^4"
   }
 }

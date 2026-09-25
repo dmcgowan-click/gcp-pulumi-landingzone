@@ -94,6 +94,7 @@ organisation: <organisation numeric ID> # used to scope the environment-folder l
 billing: <billing account id (format: XXXXXX-XXXXXX-XXXXXX)>
 seedProjectID: <seed project ID>
 defaultLocation: <valid gcp region for regional resources (e.g. australia-southeast1)>
+cicdProjectID: <cicd project ID> # (optional) - when set, the power-user group is granted CI/artifact roles on the CICD project
 labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
   <key>: <value>
 ```
@@ -138,6 +139,7 @@ labels: # (optional) - GCP project labels (lowercase keys/values, max 63 chars)
       * `name` = `name`
       * `defaultLocation` = `defaultLocation`
       * `apis` = `apis`
+      * `cicdProjectID` = `cicdProjectID` (optional org-common value; omitted when not set)
       * `bindingsPowerUser.group` = `bindingsPowerUserPrincipal`
       * `bindingsPowerUser.sa` = `bindingsPowerUserConfig.sa`
       * `bindingsPowerUser.bindings` = `bindingsPowerUserConfig.bindings`
